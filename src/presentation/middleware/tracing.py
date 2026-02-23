@@ -3,10 +3,11 @@
 from collections.abc import Awaitable, Callable
 
 import structlog
-from aws_xray_sdk.core import xray_recorder  # type: ignore[import-untyped]
+from aws_xray_sdk.core import xray_recorder
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from src.presentation.middleware.correlation_id import correlation_id_var
 
@@ -14,8 +15,8 @@ logger = structlog.get_logger()
 
 
 class TracingMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: object, service_name: str = "ugsys-identity-manager") -> None:
-        super().__init__(app)  # type: ignore[arg-type]
+    def __init__(self, app: ASGIApp, service_name: str = "ugsys-identity-manager") -> None:
+        super().__init__(app)
         self._service_name = service_name
 
     async def dispatch(

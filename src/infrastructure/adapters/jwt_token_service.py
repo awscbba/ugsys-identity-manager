@@ -28,15 +28,20 @@ class JWTTokenService(TokenService):
     def create_refresh_token(self, user_id: UUID) -> str:
         return self._encode({"sub": str(user_id), "type": "refresh"}, self._refresh_ttl)
 
-    def verify_token(self, token: str) -> dict:  # type: ignore[type-arg]
+    def verify_token(self, token: str) -> dict[str, object]:
         try:
-            payload = jwt.decode(token, self._secret, algorithms=[self._algorithm])
+            payload: dict[str, object] = jwt.decode(
+                token, self._secret, algorithms=[self._algorithm]
+            )
             if payload.get("alg") == "none" or self._algorithm == "none":
                 raise ValueError("Algorithm 'none' is not allowed")
             return payload
         except JWTError as e:
             raise ValueError(f"Invalid token: {e}") from e
 
-    def _encode(self, payload: dict, ttl: timedelta) -> str:  # type: ignore[type-arg]
+    def _encode(self, payload: dict[str, object], ttl: timedelta) -> str:
         expire = datetime.now(UTC) + ttl
-        return jwt.encode({**payload, "exp": expire}, self._secret, algorithm=self._algorithm)
+        result: str = jwt.encode(
+            {**payload, "exp": expire}, self._secret, algorithm=self._algorithm
+        )
+        return result

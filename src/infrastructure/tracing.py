@@ -5,8 +5,8 @@ Only active when XRAY_ENABLED=true — safe to leave off in local dev.
 """
 
 import structlog
-from aws_xray_sdk.core import patch, xray_recorder  # type: ignore[import-untyped]
-from aws_xray_sdk.core.context import Context  # type: ignore[import-untyped]
+from aws_xray_sdk.core import patch, xray_recorder
+from aws_xray_sdk.core.context import Context
 
 logger = structlog.get_logger()
 

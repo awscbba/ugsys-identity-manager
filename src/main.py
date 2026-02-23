@@ -49,16 +49,16 @@ def _wire_dependencies(app: FastAPI) -> None:
     )
 
     # Inline bcrypt hasher — no external dep needed beyond passlib (already in pyproject.toml)
-    from passlib.context import CryptContext  # type: ignore[import-untyped]
+    from passlib.context import CryptContext
 
     _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     class _BcryptHasher:
         def hash(self, password: str) -> str:
-            return _pwd_ctx.hash(password)
+            return str(_pwd_ctx.hash(password))
 
         def verify(self, plain: str, hashed: str) -> bool:
-            return _pwd_ctx.verify(plain, hashed)
+            return bool(_pwd_ctx.verify(plain, hashed))
 
     auth_service = AuthService(
         user_repo=user_repo,
