@@ -20,11 +20,11 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest) -> dict:
+async def register(body: RegisterRequest) -> dict:  # type: ignore[type-arg]
     # TODO: inject RegisterUserUseCase via dependency
     return {"message": "User registered", "email": body.email}
 

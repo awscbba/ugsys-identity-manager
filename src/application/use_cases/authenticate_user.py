@@ -1,9 +1,14 @@
 """Authenticate user use case."""
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from src.domain.ports.token_service import TokenService
 from src.domain.ports.user_repository import UserRepository
+
+
+class PasswordVerifier(Protocol):
+    def verify(self, plain: str, hashed: str) -> bool: ...
 
 
 @dataclass
@@ -16,7 +21,7 @@ class AuthenticateCommand:
 class TokenPair:
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
 
 
 class AuthenticateUserUseCase:
@@ -24,7 +29,7 @@ class AuthenticateUserUseCase:
         self,
         user_repo: UserRepository,
         token_service: TokenService,
-        password_hasher,
+        password_hasher: PasswordVerifier,
     ) -> None:
         self._user_repo = user_repo
         self._token_service = token_service

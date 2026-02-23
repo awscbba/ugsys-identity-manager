@@ -1,9 +1,14 @@
 """Register user use case."""
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from src.domain.entities.user import User
 from src.domain.ports.user_repository import UserRepository
+
+
+class PasswordHasher(Protocol):
+    def hash(self, password: str) -> str: ...
 
 
 @dataclass
@@ -14,7 +19,7 @@ class RegisterUserCommand:
 
 
 class RegisterUserUseCase:
-    def __init__(self, user_repo: UserRepository, password_hasher) -> None:
+    def __init__(self, user_repo: UserRepository, password_hasher: PasswordHasher) -> None:
         self._user_repo = user_repo
         self._password_hasher = password_hasher
 
