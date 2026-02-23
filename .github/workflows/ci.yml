@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: ["feature/**", "fix/**", "develop"]
+    paths-ignore: ["*.md", ".gitignore"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["*.md", ".gitignore"]
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  # ── 1. Style & architecture ──────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Ruff lint (style + import order + security rules)
+        run: uv tool run ruff check src/ tests/
+      - name: Ruff format check
+        run: uv tool run ruff format --check src/ tests/
+
+  # ── 2. Type safety ───────────────────────────────────────────────────────
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - name: mypy strict
+        run: uv run mypy src/ --ignore-missing-imports --strict --no-error-summary
+
+  # ── 3. Unit tests ────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - name: pytest
+        run: uv run pytest tests/unit/ -v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+
+  # ── 4. SAST — Bandit ─────────────────────────────────────────────────────
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Bandit security scan
+        run: uv tool run bandit -r src/ -c pyproject.toml -ll
+
+  # ── 5. Dependency CVE scan ───────────────────────────────────────────────
+  dependency-scan:
+    name: Dependency CVE Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - name: Safety check
+        run: uv run safety check --full-report
+        continue-on-error: true  # advisory only — won't block, but surfaces CVEs
+
+  # ── 6. Secret scan (all pushes + PRs) ────────────────────────────────────
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks detect --source . --no-banner --redact -v
+
+  # ── 7. Architecture guard ─────────────────────────────────────────────────
+  arch-guard:
+    name: Architecture Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce hexagonal boundaries
+        run: |
+          echo "Checking domain layer has no infra/presentation/application imports..."
+          if grep -rn "from src\.infrastructure\|from src\.presentation\|from src\.application" src/domain/ 2>/dev/null; then
+            echo "❌ Domain layer must not import from infrastructure, presentation, or application layers"
+            exit 1
+          fi
+          echo "Checking application layer has no infra/presentation imports..."
+          if grep -rn "from src\.infrastructure\|from src\.presentation" src/application/ 2>/dev/null; then
+            echo "❌ Application layer must not import from infrastructure or presentation layers"
+            exit 1
+          fi
+          echo "Checking old src/api/ layer is gone..."
+          if [ -d "src/api" ]; then
+            echo "❌ src/api/ must not exist — use src/presentation/api/v1/"
+            exit 1
+          fi
+          echo "✓ Architecture boundaries respected"
+
+  # ── 8. Notify on failure ─────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, sast, secret-scan, arch-guard]
+    if: failure()
+    steps:
+      - name: Slack failure notification
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "C0AE6QV0URH",
+              "username": "ugsys CI/CD",
+              "icon_emoji": ":x:",
+              "text": "❌ CI Failed — ugsys-identity-manager",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": "❌ CI Failed — ugsys-identity-manager", "emoji": true}
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`"},
+                    {"type": "mrkdwn", "text": "*Triggered by:*\n${{ github.actor }}"}
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {"type": "button", "text": {"type": "plain_text", "text": "View Run"},
+                     "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
+                  ]
+                }
+              ]
+            }

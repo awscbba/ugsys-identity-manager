@@ -1,0 +1,117 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["*.md", ".gitignore"]
+
+env:
+  PYTHON_VERSION: "3.13"
+  AWS_REGION: us-east-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Lambda (prod)
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync
+
+      - name: Build Lambda package
+        run: |
+          uv export --no-dev --no-hashes -o requirements.txt
+          pip install -r requirements.txt -t dist/ --quiet
+          cp -r src dist/
+          cp src/api/main.py dist/handler.py
+
+      - name: Deploy via AWS CLI (Lambda update)
+        run: |
+          cd dist && zip -r ../function.zip . -q
+          aws lambda update-function-code \
+            --function-name ugsys-identity-manager-prod \
+            --zip-file fileb://../function.zip \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Notify success
+        if: success()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "${{ secrets.SLACK_CHANNEL_ID }}",
+              "username": "ugsys CI/CD",
+              "icon_emoji": ":rocket:",
+              "text": "🚀 Deployed — ugsys-identity-manager",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": "🚀 Deployed — ugsys-identity-manager (prod)", "emoji": true}
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`"},
+                    {"type": "mrkdwn", "text": "*By:*\n${{ github.actor }}"}
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {"type": "button", "text": {"type": "plain_text", "text": "View Run"},
+                     "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
+                  ]
+                }
+              ]
+            }
+
+      - name: Notify failure
+        if: failure()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "${{ secrets.SLACK_CHANNEL_ID }}",
+              "username": "ugsys CI/CD",
+              "icon_emoji": ":x:",
+              "text": "❌ Deploy Failed — ugsys-identity-manager",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": "❌ Deploy Failed — ugsys-identity-manager", "emoji": true}
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`"},
+                    {"type": "mrkdwn", "text": "*By:*\n${{ github.actor }}"}
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {"type": "button", "text": {"type": "plain_text", "text": "View Run"},
+                     "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
+                  ]
+                }
+              ]
+            }
