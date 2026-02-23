@@ -14,6 +14,7 @@ from src.presentation.middleware.correlation_id import CorrelationIdMiddleware
 from src.presentation.middleware.rate_limiting import RateLimitMiddleware
 from src.presentation.middleware.request_logging import RequestLoggingMiddleware
 from src.presentation.middleware.security_headers import SecurityHeadersMiddleware
+from src.presentation.middleware.tracing import TracingMiddleware
 
 configure_logging(settings.service_name, settings.log_level)
 logger = structlog.get_logger()
@@ -22,6 +23,10 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("startup", service=settings.service_name, environment=settings.environment)
+    if settings.xray_enabled:
+        from src.infrastructure.tracing import configure_tracing
+
+        configure_tracing(settings.service_name)
     _wire_dependencies(app)
     yield
     logger.info("shutdown", service=settings.service_name)
@@ -75,6 +80,8 @@ app = FastAPI(
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
+if settings.xray_enabled:
+    app.add_middleware(TracingMiddleware, service_name=settings.service_name)
 app.add_middleware(CorrelationIdMiddleware)
 
 # Routers

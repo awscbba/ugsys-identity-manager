@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 30
     jwt_refresh_ttl_days: int = 7
 
+    # Tracing
+    xray_enabled: bool = False  # set to true in prod via XRAY_ENABLED=true
+
     @property
     def users_table(self) -> str:
         return f"{self.dynamodb_table_prefix}-identity-users-{self.environment}"

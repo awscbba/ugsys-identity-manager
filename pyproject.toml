@@ -14,6 +14,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "structlog>=24.1",
     "mangum>=0.17",
+    "aws-xray-sdk>=2.14",
     "ugsys-auth-client",
     "ugsys-logging-lib",
     "ugsys-event-lib",
