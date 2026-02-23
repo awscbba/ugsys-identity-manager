@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m' NC='\033[0m'
+echo "" && echo "🔍 Running pre-commit checks..." && echo ""
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+if [[ "$BRANCH" == "main" ]]; then
+  echo -e "${RED}✗ Direct commits to 'main' are not allowed.${NC}"; exit 1
+fi
+FAILED=0
+echo -e "${YELLOW}── Ruff lint ──${NC}"
+if uv tool run ruff check src/ tests/ --quiet 2>&1; then
+  echo -e "  ${GREEN}✓ ruff lint${NC}"
+else
+  echo -e "  ${RED}✗ ruff lint failed — run: just lint${NC}"; FAILED=1
+fi
+echo -e "${YELLOW}── Ruff format ──${NC}"
+if uv tool run ruff format --check src/ tests/ --quiet 2>&1; then
+  echo -e "  ${GREEN}✓ ruff format${NC}"
+else
+  echo -e "  ${RED}✗ ruff format failed — run: just format${NC}"; FAILED=1
+fi
+echo ""
+if [ $FAILED -ne 0 ]; then echo -e "${RED}✗ Pre-commit checks failed.${NC}"; exit 1; fi
+echo -e "${GREEN}✓ All pre-commit checks passed.${NC}" && echo ""
+exit 0
