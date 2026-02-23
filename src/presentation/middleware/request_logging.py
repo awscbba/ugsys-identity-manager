@@ -11,7 +11,7 @@ from starlette.responses import Response
 logger = structlog.get_logger()
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:

@@ -1,11 +1,12 @@
 """DynamoDB user repository — adapter implementing UserRepository port."""
 
+from datetime import datetime
 from uuid import UUID
 
 import boto3
 
 from src.domain.entities.user import User, UserRole, UserStatus
-from src.domain.ports.user_repository import UserRepository
+from src.domain.repositories.user_repository import UserRepository
 
 
 class DynamoDBUserRepository(UserRepository):
@@ -34,7 +35,7 @@ class DynamoDBUserRepository(UserRepository):
         self._table.delete_item(Key={"pk": f"USER#{user_id}", "sk": "PROFILE"})
 
     @staticmethod
-    def _to_item(user: User) -> dict:
+    def _to_item(user: User) -> dict:  # type: ignore[type-arg]
         return {
             "pk": f"USER#{user.id}",
             "sk": "PROFILE",
@@ -49,10 +50,7 @@ class DynamoDBUserRepository(UserRepository):
         }
 
     @staticmethod
-    def _from_item(item: dict) -> User:
-        from datetime import datetime
-        from uuid import UUID
-
+    def _from_item(item: dict) -> User:  # type: ignore[type-arg]
         return User(
             id=UUID(item["id"]),
             email=item["email"],

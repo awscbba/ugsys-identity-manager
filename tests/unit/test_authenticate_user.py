@@ -1,14 +1,15 @@
-"""Unit tests for AuthenticateUserUseCase."""
+"""Unit tests for AuthService.authenticate."""
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.use_cases.authenticate_user import AuthenticateCommand, AuthenticateUserUseCase
+from src.application.commands.authenticate_user import AuthenticateCommand
+from src.application.services.auth_service import AuthService
 from src.domain.entities.user import User, UserRole, UserStatus
 
 
-def make_user(status=UserStatus.ACTIVE):
+def make_user(status: UserStatus = UserStatus.ACTIVE) -> User:
     return User(
         email="user@example.com",
         hashed_password="hashed",
@@ -19,7 +20,7 @@ def make_user(status=UserStatus.ACTIVE):
 
 
 @pytest.fixture
-def deps():
+def deps() -> tuple[AsyncMock, MagicMock, MagicMock]:
     repo = AsyncMock()
     token_svc = MagicMock()
     hasher = MagicMock()
@@ -30,29 +31,29 @@ def deps():
 
 
 @pytest.mark.asyncio
-async def test_login_success(deps):
+async def test_login_success(deps: tuple[AsyncMock, MagicMock, MagicMock]) -> None:
     repo, token_svc, hasher = deps
     repo.find_by_email.return_value = make_user()
-    uc = AuthenticateUserUseCase(repo, token_svc, hasher)
-    result = await uc.execute(AuthenticateCommand(email="user@example.com", password="pw"))
+    svc = AuthService(repo, token_svc, hasher)
+    result = await svc.authenticate(AuthenticateCommand(email="user@example.com", password="pw"))
     assert result.access_token == "access"
     assert result.refresh_token == "refresh"
 
 
 @pytest.mark.asyncio
-async def test_login_wrong_password(deps):
+async def test_login_wrong_password(deps: tuple[AsyncMock, MagicMock, MagicMock]) -> None:
     repo, token_svc, hasher = deps
     repo.find_by_email.return_value = make_user()
     hasher.verify.return_value = False
-    uc = AuthenticateUserUseCase(repo, token_svc, hasher)
+    svc = AuthService(repo, token_svc, hasher)
     with pytest.raises(ValueError, match="Invalid credentials"):
-        await uc.execute(AuthenticateCommand(email="user@example.com", password="wrong"))
+        await svc.authenticate(AuthenticateCommand(email="user@example.com", password="wrong"))
 
 
 @pytest.mark.asyncio
-async def test_login_inactive_user(deps):
+async def test_login_inactive_user(deps: tuple[AsyncMock, MagicMock, MagicMock]) -> None:
     repo, token_svc, hasher = deps
     repo.find_by_email.return_value = make_user(status=UserStatus.INACTIVE)
-    uc = AuthenticateUserUseCase(repo, token_svc, hasher)
+    svc = AuthService(repo, token_svc, hasher)
     with pytest.raises(ValueError, match="not active"):
-        await uc.execute(AuthenticateCommand(email="user@example.com", password="pw"))
+        await svc.authenticate(AuthenticateCommand(email="user@example.com", password="pw"))

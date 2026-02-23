@@ -96,14 +96,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Enforce hexagonal boundaries
         run: |
-          echo "Checking domain layer has no infra/api imports..."
-          if grep -rn "from src\.infrastructure\|from src\.api" src/domain/ 2>/dev/null; then
-            echo "❌ Domain layer must not import from infrastructure or api layers"
+          echo "Checking domain layer has no infra/presentation/application imports..."
+          if grep -rn "from src\.infrastructure\|from src\.presentation\|from src\.application" src/domain/ 2>/dev/null; then
+            echo "❌ Domain layer must not import from infrastructure, presentation, or application layers"
             exit 1
           fi
-          echo "Checking application layer has no infra/api imports..."
-          if grep -rn "from src\.infrastructure\|from src\.api" src/application/ 2>/dev/null; then
-            echo "❌ Application layer must not import from infrastructure or api layers"
+          echo "Checking application layer has no infra/presentation imports..."
+          if grep -rn "from src\.infrastructure\|from src\.presentation" src/application/ 2>/dev/null; then
+            echo "❌ Application layer must not import from infrastructure or presentation layers"
+            exit 1
+          fi
+          echo "Checking old src/api/ layer is gone..."
+          if [ -d "src/api" ]; then
+            echo "❌ src/api/ must not exist — use src/presentation/api/v1/"
             exit 1
           fi
           echo "✓ Architecture boundaries respected"
