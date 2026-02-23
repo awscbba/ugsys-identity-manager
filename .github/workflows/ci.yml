@@ -120,15 +120,14 @@ jobs:
     needs: [lint, typecheck, test, sast, secret-scan, arch-guard]
     if: failure()
     steps:
-      - name: Slack
-        continue-on-error: true
+      - name: Slack failure notification
         uses: slackapi/slack-github-action@v2.0.0
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             {
-              "channel": "${{ secrets.SLACK_CHANNEL_ID }}",
+              "channel": "C0AE6QV0URH",
               "username": "ugsys CI/CD",
               "icon_emoji": ":x:",
               "text": "❌ CI Failed — ugsys-identity-manager",
