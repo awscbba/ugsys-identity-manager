@@ -53,6 +53,7 @@ ROLE_MAP: dict[str, str] = {
     "moderator": "member",
     "auditor": "member",
     "guest": "member",
+    "system": "member",  # no system role in identity-manager — falls back to member
     "admin": "admin",
     "super_admin": "super_admin",
 }
@@ -117,8 +118,17 @@ def transform(person: dict, roles: list[str]) -> dict:  # type: ignore[type-arg]
     full_name = f"{first} {last}".strip() or "Unknown"
 
     # Status mapping
+    # emailVerified=false + isActive=true → pending_verification (must verify before full access)
+    # emailVerified=true  + isActive=true → active
+    # isActive=false (any emailVerified)  → inactive
     is_active = person.get("isActive", False)
-    status = "active" if is_active else "inactive"
+    email_verified = person.get("emailVerified", False)
+    if not is_active:
+        status = "inactive"
+    elif not email_verified:
+        status = "pending_verification"
+    else:
+        status = "active"
 
     # Timestamps — preserve originals, fall back to now
     now = datetime.now(UTC).isoformat()
