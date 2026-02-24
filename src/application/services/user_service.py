@@ -1,6 +1,7 @@
 """User application service — orchestrates user read/update/admin use cases."""
 
 from typing import Protocol
+from uuid import UUID
 
 import structlog
 
@@ -11,7 +12,7 @@ from src.application.commands.update_user import (
     UpdateProfileCommand,
 )
 from src.application.queries.get_user import GetUserQuery
-from src.domain.entities.user import User
+from src.domain.entities.user import User, UserRole
 from src.domain.repositories.user_repository import UserRepository
 
 logger = structlog.get_logger()
@@ -125,3 +126,23 @@ class UserService:
                 detail={"user_id": str(updated.id)},
             )
         return updated
+
+    async def list_users(self, requester_id: str, is_admin: bool) -> list[User]:
+        """List all users — admin only."""
+        if not is_admin:
+            raise PermissionError("Admin access required")
+        logger.info("user_service.list_users.started", requester=requester_id)
+        users = await self._user_repo.list_all()
+        logger.info("user_service.list_users.completed", count=len(users))
+        return users
+
+    async def get_user_roles(
+        self, user_id: UUID, requester_id: str, is_admin: bool
+    ) -> list[UserRole]:
+        """Return the roles for a user. Admins can query any user; users can query themselves."""
+        user = await self._user_repo.find_by_id(user_id)
+        if not user:
+            raise ValueError(f"User not found: {user_id}")
+        if not is_admin and str(user.id) != requester_id:
+            raise PermissionError("Access denied")
+        return list(user.roles)

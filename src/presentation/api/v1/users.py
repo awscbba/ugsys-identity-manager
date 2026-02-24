@@ -74,6 +74,22 @@ def _user_dict(user: object) -> dict:  # type: ignore[type-arg]
     }
 
 
+@router.get("")
+async def list_users(
+    credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
+    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    token_service: TokenService = Depends(get_token_service),  # noqa: B008
+) -> list[dict]:  # type: ignore[type-arg]
+    claims = _extract_claims(credentials, token_service)
+    roles: list[str] = list(claims.get("roles", []))
+    is_admin = "admin" in roles or "super_admin" in roles
+    try:
+        users = await user_service.list_users(requester_id=str(claims["sub"]), is_admin=is_admin)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    return [_user_dict(u) for u in users]
+
+
 @router.get("/me")
 async def get_me(
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
@@ -174,6 +190,28 @@ async def remove_role(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     return _user_dict(user)
+
+
+@router.get("/{user_id}/roles")
+async def get_user_roles(
+    user_id: UUID,
+    credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
+    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    token_service: TokenService = Depends(get_token_service),  # noqa: B008
+) -> dict:  # type: ignore[type-arg]
+    claims = _extract_claims(credentials, token_service)
+    requester_id = str(claims["sub"])
+    roles: list[str] = list(claims.get("roles", []))
+    is_admin = "admin" in roles or "super_admin" in roles
+    try:
+        user_roles = await user_service.get_user_roles(
+            user_id=user_id, requester_id=requester_id, is_admin=is_admin
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return {"user_id": str(user_id), "roles": [r.value for r in user_roles]}
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)

@@ -18,6 +18,8 @@ class JWTTokenService(TokenService):
         self._algorithm = algorithm
         self._access_ttl = timedelta(minutes=30)
         self._refresh_ttl = timedelta(days=7)
+        self._reset_ttl = timedelta(hours=1)
+        self._service_ttl = timedelta(hours=1)
 
     def create_access_token(self, user_id: UUID, roles: list[str]) -> str:
         return self._encode(
@@ -27,6 +29,18 @@ class JWTTokenService(TokenService):
 
     def create_refresh_token(self, user_id: UUID) -> str:
         return self._encode({"sub": str(user_id), "type": "refresh"}, self._refresh_ttl)
+
+    def create_password_reset_token(self, user_id: UUID, email: str) -> str:
+        return self._encode(
+            {"sub": str(user_id), "email": email, "type": "password_reset"},
+            self._reset_ttl,
+        )
+
+    def create_service_token(self, client_id: str, roles: list[str]) -> str:
+        return self._encode(
+            {"sub": client_id, "roles": roles, "type": "service"},
+            self._service_ttl,
+        )
 
     def verify_token(self, token: str) -> dict[str, object]:
         try:

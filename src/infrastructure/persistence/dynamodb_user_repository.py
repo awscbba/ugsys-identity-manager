@@ -40,6 +40,18 @@ class DynamoDBUserRepository(UserRepository):
         items = resp.get("Items", [])
         return self._from_item(items[0]) if items else None
 
+    async def list_all(self) -> list[User]:
+        items: list[dict] = []  # type: ignore[type-arg]
+        kwargs: dict[str, object] = {}
+        while True:
+            resp = self._table.scan(**kwargs)  # type: ignore[arg-type]
+            items.extend(resp.get("Items", []))
+            last = resp.get("LastEvaluatedKey")
+            if not last:
+                break
+            kwargs["ExclusiveStartKey"] = last
+        return [self._from_item(i) for i in items if i.get("sk") == "PROFILE"]
+
     async def delete(self, user_id: UUID) -> None:
         self._table.delete_item(Key={"pk": f"USER#{user_id}", "sk": "PROFILE"})
         logger.info("dynamodb.user.deleted", user_id=str(user_id))
