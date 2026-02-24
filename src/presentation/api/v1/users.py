@@ -75,7 +75,7 @@ async def get_user(
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
-    roles: list[str] = list(claims.get("roles", []))  # type: ignore[arg-type]
+    roles: list[str] = list(claims.get("roles", []))
     is_admin = "admin" in roles or "super_admin" in roles
     try:
         user = await user_service.get_user(
