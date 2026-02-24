@@ -38,3 +38,21 @@ class User:
     def activate(self) -> None:
         self.status = UserStatus.ACTIVE
         self.updated_at = datetime.now(UTC)
+
+    def deactivate(self) -> None:
+        self.status = UserStatus.INACTIVE
+        self.updated_at = datetime.now(UTC)
+
+    def assign_role(self, role: UserRole) -> None:
+        if role not in self.roles:
+            self.roles.append(role)
+            self.updated_at = datetime.now(UTC)
+
+    def remove_role(self, role: UserRole) -> None:
+        if role in self.roles:
+            self.roles.remove(role)
+            self.updated_at = datetime.now(UTC)
+
+    def update_profile(self, full_name: str) -> None:
+        self.full_name = full_name
+        self.updated_at = datetime.now(UTC)

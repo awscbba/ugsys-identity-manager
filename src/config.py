@@ -1,5 +1,6 @@
 """Application settings — loaded from environment variables."""
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -11,9 +12,12 @@ class Settings(BaseSettings):
     event_bus_name: str = "ugsys-event-bus"
     log_level: str = "INFO"
 
+    # DynamoDB — matches CDK stack: ugsys-identity-manager-users-{env}
+    dynamodb_table_name: str = ""  # if set, overrides the computed property
+
     # JWT — override in prod via env / Secrets Manager
     jwt_secret_key: str = "change-me-in-production"  # noqa: S105
-    jwt_algorithm: str = "HS256"
+    jwt_algorithm: str = "RS256"
     jwt_access_ttl_minutes: int = 30
     jwt_refresh_ttl_days: int = 7
 
@@ -22,11 +26,12 @@ class Settings(BaseSettings):
 
     @property
     def users_table(self) -> str:
-        return f"{self.dynamodb_table_prefix}-identity-users-{self.environment}"
+        if self.dynamodb_table_name:
+            return self.dynamodb_table_name
+        # Matches CDK IdentityManagerStack table name
+        return f"ugsys-identity-manager-users-{self.environment}"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", case_sensitive=False)
 
 
 settings = Settings()

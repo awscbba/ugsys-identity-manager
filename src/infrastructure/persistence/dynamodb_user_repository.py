@@ -4,9 +4,12 @@ from datetime import datetime
 from uuid import UUID
 
 import boto3
+import structlog
 
 from src.domain.entities.user import User, UserRole, UserStatus
 from src.domain.repositories.user_repository import UserRepository
+
+logger = structlog.get_logger()
 
 
 class DynamoDBUserRepository(UserRepository):
@@ -15,6 +18,12 @@ class DynamoDBUserRepository(UserRepository):
 
     async def save(self, user: User) -> User:
         self._table.put_item(Item=self._to_item(user))
+        logger.info("dynamodb.user.saved", user_id=str(user.id))
+        return user
+
+    async def update(self, user: User) -> User:
+        self._table.put_item(Item=self._to_item(user))
+        logger.info("dynamodb.user.updated", user_id=str(user.id))
         return user
 
     async def find_by_id(self, user_id: UUID) -> User | None:
@@ -33,6 +42,7 @@ class DynamoDBUserRepository(UserRepository):
 
     async def delete(self, user_id: UUID) -> None:
         self._table.delete_item(Key={"pk": f"USER#{user_id}", "sk": "PROFILE"})
+        logger.info("dynamodb.user.deleted", user_id=str(user_id))
 
     @staticmethod
     def _to_item(user: User) -> dict:  # type: ignore[type-arg]
