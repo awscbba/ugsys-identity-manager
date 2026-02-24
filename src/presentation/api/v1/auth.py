@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 
 from src.application.commands.authenticate_user import AuthenticateCommand
+from src.application.commands.refresh_token import RefreshTokenCommand
 from src.application.commands.register_user import RegisterUserCommand
 from src.application.services.auth_service import AuthService
 
@@ -28,6 +29,10 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class TokenResponse(BaseModel):
@@ -78,7 +83,17 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from e
 
 
-@router.post("/refresh")
-async def refresh(refresh_token: str) -> TokenResponse:
-    # TODO: implement refresh token flow
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    body: RefreshRequest,
+    service: AuthService = Depends(get_auth_service),  # noqa: B008
+) -> TokenResponse:
+    try:
+        tokens = await service.refresh(RefreshTokenCommand(refresh_token=body.refresh_token))
+        logger.info("auth.refresh.success")
+        return TokenResponse(
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from e

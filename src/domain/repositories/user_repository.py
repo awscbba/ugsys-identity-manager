@@ -11,6 +11,9 @@ class UserRepository(ABC):
     async def save(self, user: User) -> User: ...
 
     @abstractmethod
+    async def update(self, user: User) -> User: ...
+
+    @abstractmethod
     async def find_by_id(self, user_id: UUID) -> User | None: ...
 
     @abstractmethod

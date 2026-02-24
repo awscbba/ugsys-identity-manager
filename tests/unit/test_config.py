@@ -4,8 +4,13 @@ from src.config import Settings
 
 
 def test_users_table_property() -> None:
-    s = Settings(dynamodb_table_prefix="myprefix", environment="staging")
-    assert s.users_table == "myprefix-identity-users-staging"
+    s = Settings(environment="staging")
+    assert s.users_table == "ugsys-identity-manager-users-staging"
+
+
+def test_users_table_override() -> None:
+    s = Settings(dynamodb_table_name="custom-table", environment="staging")
+    assert s.users_table == "custom-table"
 
 
 def test_defaults() -> None:

@@ -34,10 +34,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 def _wire_dependencies(app: FastAPI) -> None:
     """Wire infrastructure adapters into presentation layer via dependency overrides."""
+    from passlib.context import CryptContext
+
     from src.application.services.auth_service import AuthService
+    from src.application.services.user_service import UserService
     from src.infrastructure.adapters.jwt_token_service import JWTTokenService
+    from src.infrastructure.messaging.event_publisher import EventPublisher
     from src.infrastructure.persistence.dynamodb_user_repository import DynamoDBUserRepository
     from src.presentation.api.v1.auth import get_auth_service
+    from src.presentation.api.v1.users import get_token_service, get_user_service
 
     user_repo = DynamoDBUserRepository(
         table_name=settings.users_table,
@@ -47,9 +52,10 @@ def _wire_dependencies(app: FastAPI) -> None:
         secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )
-
-    # Inline bcrypt hasher — no external dep needed beyond passlib (already in pyproject.toml)
-    from passlib.context import CryptContext
+    event_publisher = EventPublisher(
+        bus_name=settings.event_bus_name,
+        region=settings.aws_region,
+    )
 
     _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -64,8 +70,13 @@ def _wire_dependencies(app: FastAPI) -> None:
         user_repo=user_repo,
         token_service=token_service,
         password_hasher=_BcryptHasher(),
+        event_publisher=event_publisher,
     )
+    user_service = UserService(user_repo=user_repo)
+
     app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_user_service] = lambda: user_service
+    app.dependency_overrides[get_token_service] = lambda: token_service
 
 
 app = FastAPI(
