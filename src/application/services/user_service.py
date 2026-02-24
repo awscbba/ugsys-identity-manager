@@ -1,7 +1,15 @@
-"""User application service — orchestrates user read/update use cases."""
+"""User application service — orchestrates user read/update/admin use cases."""
+
+from typing import Protocol
 
 import structlog
 
+from src.application.commands.update_user import (
+    AssignRoleCommand,
+    DeactivateUserCommand,
+    RemoveRoleCommand,
+    UpdateProfileCommand,
+)
 from src.application.queries.get_user import GetUserQuery
 from src.domain.entities.user import User
 from src.domain.repositories.user_repository import UserRepository
@@ -9,9 +17,19 @@ from src.domain.repositories.user_repository import UserRepository
 logger = structlog.get_logger()
 
 
+class EventPublisherProtocol(Protocol):
+    def publish(self, source: str, detail_type: str, detail: dict) -> None:  # type: ignore[type-arg]
+        ...
+
+
 class UserService:
-    def __init__(self, user_repo: UserRepository) -> None:
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        event_publisher: EventPublisherProtocol | None = None,
+    ) -> None:
         self._user_repo = user_repo
+        self._events = event_publisher
 
     async def get_user(self, query: GetUserQuery) -> User:
         logger.info("user_service.get_user.started", user_id=str(query.user_id))
@@ -28,3 +46,82 @@ class UserService:
             raise PermissionError("Access denied")
         logger.info("user_service.get_user.completed", user_id=str(user.id))
         return user
+
+    async def update_profile(self, command: UpdateProfileCommand) -> User:
+        logger.info("user_service.update_profile.started", user_id=str(command.user_id))
+        user = await self._user_repo.find_by_id(command.user_id)
+        if not user:
+            raise ValueError(f"User not found: {command.user_id}")
+        # Only self or admin can update profile
+        if str(user.id) != command.requester_id:
+            raise PermissionError("Access denied")
+        user.update_profile(command.full_name)
+        updated = await self._user_repo.update(user)
+        logger.info("user_service.update_profile.completed", user_id=str(updated.id))
+        if self._events:
+            self._events.publish(
+                source="ugsys.identity-manager",
+                detail_type="identity.user.updated",
+                detail={"user_id": str(updated.id)},
+            )
+        return updated
+
+    async def assign_role(self, command: AssignRoleCommand) -> User:
+        logger.info(
+            "user_service.assign_role.started",
+            user_id=str(command.user_id),
+            role=command.role,
+        )
+        user = await self._user_repo.find_by_id(command.user_id)
+        if not user:
+            raise ValueError(f"User not found: {command.user_id}")
+        user.assign_role(command.role)
+        updated = await self._user_repo.update(user)
+        logger.info(
+            "user_service.assign_role.completed", user_id=str(updated.id), role=command.role
+        )
+        if self._events:
+            self._events.publish(
+                source="ugsys.identity-manager",
+                detail_type="identity.user.role_changed",
+                detail={"user_id": str(updated.id), "role": command.role, "action": "assigned"},
+            )
+        return updated
+
+    async def remove_role(self, command: RemoveRoleCommand) -> User:
+        logger.info(
+            "user_service.remove_role.started",
+            user_id=str(command.user_id),
+            role=command.role,
+        )
+        user = await self._user_repo.find_by_id(command.user_id)
+        if not user:
+            raise ValueError(f"User not found: {command.user_id}")
+        user.remove_role(command.role)
+        updated = await self._user_repo.update(user)
+        logger.info(
+            "user_service.remove_role.completed", user_id=str(updated.id), role=command.role
+        )
+        if self._events:
+            self._events.publish(
+                source="ugsys.identity-manager",
+                detail_type="identity.user.role_changed",
+                detail={"user_id": str(updated.id), "role": command.role, "action": "removed"},
+            )
+        return updated
+
+    async def deactivate(self, command: DeactivateUserCommand) -> User:
+        logger.info("user_service.deactivate.started", user_id=str(command.user_id))
+        user = await self._user_repo.find_by_id(command.user_id)
+        if not user:
+            raise ValueError(f"User not found: {command.user_id}")
+        user.deactivate()
+        updated = await self._user_repo.update(user)
+        logger.info("user_service.deactivate.completed", user_id=str(updated.id))
+        if self._events:
+            self._events.publish(
+                source="ugsys.identity-manager",
+                detail_type="identity.user.deleted",
+                detail={"user_id": str(updated.id)},
+            )
+        return updated

@@ -72,7 +72,7 @@ def _wire_dependencies(app: FastAPI) -> None:
         password_hasher=_BcryptHasher(),
         event_publisher=event_publisher,
     )
-    user_service = UserService(user_repo=user_repo)
+    user_service = UserService(user_repo=user_repo, event_publisher=event_publisher)
 
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_user_service] = lambda: user_service
