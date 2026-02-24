@@ -34,7 +34,7 @@ jobs:
       - name: Build Lambda package
         run: |
           uv export --no-dev --no-hashes -o requirements.txt
-          pip install -r requirements.txt -t dist/ --quiet
+          uv pip install -r requirements.txt -t dist/ --quiet
           cp -r src dist/
           cp src/main.py dist/handler.py
 
