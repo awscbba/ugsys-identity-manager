@@ -43,6 +43,10 @@ TEST_EMAIL = f"smoke+{RUN_ID}@test.cbba.cloud.org.bo"
 TEST_PASSWORD = "Smoke@Test1!"
 TEST_NAME = "Smoke Test User"
 
+# Second user for account lockout test — isolated from main flow
+LOCKOUT_EMAIL = f"lockout+{RUN_ID}@test.cbba.cloud.org.bo"
+LOCKOUT_PASSWORD = "Lockout@Test1!"
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 passed = 0
@@ -71,6 +75,22 @@ def get_verification_token(email: str) -> str | None:
     if not items:
         return None
     return items[0].get("email_verification_token")  # type: ignore[return-value]
+
+
+def register_and_verify(email: str, password: str, name: str) -> bool:
+    """Register a user and verify their email. Returns True on success."""
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": password, "full_name": name},
+    )
+    if r.status_code != 201:
+        return False
+    time.sleep(1)
+    token = get_verification_token(email)
+    if not token:
+        return False
+    r = client.post("/api/v1/auth/verify-email", json={"token": token})
+    return r.status_code == 200
 
 
 # ── Test steps ────────────────────────────────────────────────────────────────
@@ -187,6 +207,48 @@ r = client.post(
     json={"email": f"weak+{RUN_ID}@test.cbba.cloud.org.bo", "password": "weak", "full_name": "Test"},
 )
 step("weak password → 422", r.status_code == 422, f"HTTP {r.status_code}")
+
+# 14. Account lockout — register+verify a fresh user, then fail login 5 times
+print("\n14. Account lockout")
+lockout_ready = register_and_verify(LOCKOUT_EMAIL, LOCKOUT_PASSWORD, "Lockout User")
+step("lockout user registered and verified", lockout_ready, LOCKOUT_EMAIL)
+
+if lockout_ready:
+    # 4 failed attempts — should still return 401 (wrong credentials)
+    for attempt in range(1, 5):
+        r = client.post(
+            "/api/v1/auth/login",
+            json={"email": LOCKOUT_EMAIL, "password": "WrongPass@1!"},
+        )
+        step(
+            f"failed attempt {attempt} → 401",
+            r.status_code == 401,
+            f"HTTP {r.status_code}",
+        )
+
+    # 5th failed attempt — account should now be locked → 423
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": LOCKOUT_EMAIL, "password": "WrongPass@1!"},
+    )
+    step("5th failed attempt → 423 (locked)", r.status_code == 423, f"HTTP {r.status_code}: {r.text[:120]}")
+    retry_after = r.json().get("data", {}).get("retry_after_seconds")
+    step(
+        "response has retry_after_seconds",
+        isinstance(retry_after, (int, float)) and retry_after > 0,
+        str(retry_after),
+    )
+
+    # Correct password also rejected while locked
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": LOCKOUT_EMAIL, "password": LOCKOUT_PASSWORD},
+    )
+    step(
+        "correct password rejected while locked (423)",
+        r.status_code == 423,
+        f"HTTP {r.status_code}: {r.text[:120]}",
+    )
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
