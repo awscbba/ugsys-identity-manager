@@ -54,7 +54,7 @@ def make_service(
     if hasher is None:
         hasher = MagicMock()
         hasher.verify.return_value = True
-        hasher.hash.return_value = "hashed_pw"
+        hasher.hash.return_value = "hashed_pw"  # gitguardian:ignore
     if blacklist is None:
         blacklist = AsyncMock()
     return AuthService(
@@ -239,10 +239,13 @@ async def test_logout_success_blacklists_jti() -> None:
     repo = AsyncMock()
     blacklist = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"jti": "some-jti", "exp": 9999999999}
+    token_svc.verify_token.return_value = {
+        "jti": "some-jti",
+        "exp": 9999999999,
+    }  # gitguardian:ignore
     svc = make_service(repo, token_svc=token_svc, blacklist=blacklist)
 
-    await svc.logout(LogoutCommand(access_token="valid-tok"))
+    await svc.logout(LogoutCommand(access_token="valid-tok"))  # gitguardian:ignore
 
     blacklist.add.assert_called_once_with("some-jti", 9999999999)
 
@@ -317,7 +320,9 @@ async def test_register_with_events_publishes_user_registered() -> None:
     repo.save.side_effect = lambda u: u
     svc = make_service(repo, events=events)
 
-    cmd = RegisterUserCommand(email="new@example.com", password="Str0ng!Pass", full_name="New User")
+    cmd = RegisterUserCommand(
+        email="new@example.com", password="Str0ng!Pass", full_name="New User"
+    )  # gitguardian:ignore
     await svc.register(cmd)
 
     events.publish.assert_called_once()

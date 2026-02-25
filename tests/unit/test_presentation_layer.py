@@ -282,7 +282,7 @@ def test_list_response_single_page() -> None:
 # ─── _require_admin ───────────────────────────────────────────────────────────
 
 
-def make_credentials(token: str = "test-token") -> HTTPAuthorizationCredentials:  # noqa: S107
+def make_credentials(token: str = "test-token") -> HTTPAuthorizationCredentials:  # noqa: S107  # gitguardian:ignore
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
