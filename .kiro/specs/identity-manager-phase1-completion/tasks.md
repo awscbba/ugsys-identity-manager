@@ -363,8 +363,8 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
   - Verify domain exceptions are used everywhere (no raw ValueError/PermissionError from app/domain)
   - Verify all API responses use envelope format
 
-- [ ] 13. Moto integration tests — DynamoDB adapters
-  - [ ] 13.1 Write integration tests for DynamoDBUserRepository in `tests/integration/test_dynamodb_user_repo.py`
+- [x] 13. Moto integration tests — DynamoDB adapters
+  - [x] 13.1 Write integration tests for DynamoDBUserRepository in `tests/integration/test_dynamodb_user_repo.py`
     - Use `moto` `mock_aws` decorator to spin up a fake DynamoDB table matching the real schema (PK=`pk`, SK=`sk`, GSI `status-index`)
     - Test `save()` then `find_by_id()` round-trips all User fields including new security/verification fields
     - Test `find_by_email()` returns correct user
@@ -376,7 +376,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test `find_by_verification_token()` returns None for unknown token
     - _Requirements: 13.1, 13.2, 13.4_
 
-  - [ ] 13.2 Write integration tests for DynamoDBTokenBlacklistRepository in `tests/integration/test_dynamodb_token_blacklist.py`
+  - [x] 13.2 Write integration tests for DynamoDBTokenBlacklistRepository in `tests/integration/test_dynamodb_token_blacklist.py`
     - Use `moto` `mock_aws` decorator to spin up a fake DynamoDB table with PK=`jti` and TTL attribute `ttl`
     - Test `add(jti, ttl_epoch)` writes item with correct attributes
     - Test `is_blacklisted(jti)` returns `True` for a jti that was added
@@ -384,8 +384,8 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test adding the same jti twice does not raise (idempotent)
     - _Requirements: 4.3, 13.3_
 
-- [ ] 14. Moto integration tests — Full HTTP layer (httpx + moto + FastAPI)
-  - [ ] 14.1 Create integration test fixtures in `tests/integration/conftest.py`
+- [-] 14. Moto integration tests — Full HTTP layer (httpx + moto + FastAPI)
+  - [x] 14.1 Create integration test fixtures in `tests/integration/conftest.py`
     - `aws_credentials` fixture: set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` to moto-safe dummy values via `monkeypatch`
     - `dynamodb_tables` fixture (depends on `aws_credentials`): use `moto` `mock_aws` to create both DynamoDB tables (`ugsys-identity-manager-users-test` and `ugsys-identity-test-token-blacklist`) with correct key schemas and GSI
     - `app_client` fixture (depends on `dynamodb_tables`): set `ENVIRONMENT=test`, `DYNAMODB_TABLE_NAME=ugsys-identity-manager-users-test`, `TOKEN_BLACKLIST_TABLE_NAME=ugsys-identity-test-token-blacklist`, `JWT_SECRET_KEY=test-secret`, `JWT_ALGORITHM=HS256`; import and call `create_app()` (or use the existing `app`); return `httpx.AsyncClient(app=app, base_url="http://test")`
