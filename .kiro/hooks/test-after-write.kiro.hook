@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "TDD — Run Tests After Code Changes",
+  "description": "Enforces TDD workflow: after editing Python source or test files, run the relevant tests immediately. Tests must be written BEFORE implementation (Red-Green-Refactor).",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/src/**/*.py",
+      "**/tests/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "You just edited a Python file. Follow the TDD workflow:\n\n1. If you wrote a TEST file: run it now with `uv run pytest <test_file>::<test_name> -v` — it should FAIL (RED). If it passes, you wrote the implementation first — that violates TDD.\n\n2. If you wrote a SOURCE file: run the corresponding test with `uv run pytest tests/unit/ -v --tb=short` — it should now PASS (GREEN). If it fails, fix it NOW before writing more code.\n\n3. NEVER skip running tests. NEVER write more implementation without a failing test first.\n\nRun the tests in the correct repo directory using cwd."
+  }
+}
