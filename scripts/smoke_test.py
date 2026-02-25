@@ -104,7 +104,7 @@ step("response has user_id", bool(user_id), str(body))
 print("\n3. Login before email verification")
 r = client.post("/api/v1/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
 step("POST /login → 401 (not verified)", r.status_code == 401, f"HTTP {r.status_code}")
-error_code = r.json().get("error", "")
+error_code = r.json().get("error", {}).get("code", "")
 step("error code is EMAIL_NOT_VERIFIED", error_code == "EMAIL_NOT_VERIFIED", error_code)
 
 # 4. Resend verification (anti-enumeration — always 200)
@@ -147,19 +147,25 @@ step("new access_token returned", bool(new_access))
 
 # 9. Logout
 print("\n9. Logout")
-r = client.post(
-    "/api/v1/auth/logout",
-    headers={"Authorization": f"Bearer {access_token}"},
-)
-step("POST /logout → 200", r.status_code == 200, f"HTTP {r.status_code}: {r.text[:120]}")
+if not access_token:
+    step("POST /logout → 200", False, "skipped — no access_token from login")
+else:
+    r = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    step("POST /logout → 200", r.status_code == 200, f"HTTP {r.status_code}: {r.text[:120]}")
 
 # 10. Reuse revoked token — must be rejected
 print("\n10. Reuse revoked token")
-r = client.post(
-    "/api/v1/auth/logout",
-    headers={"Authorization": f"Bearer {access_token}"},
-)
-step("revoked token rejected (401)", r.status_code == 401, f"HTTP {r.status_code}: {r.text[:120]}")
+if not access_token:
+    step("revoked token rejected (401)", False, "skipped — no access_token from login")
+else:
+    r = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    step("revoked token rejected (401)", r.status_code == 401, f"HTTP {r.status_code}: {r.text[:120]}")
 
 # 11. Forgot password (anti-enumeration)
 print("\n11. Forgot password")
