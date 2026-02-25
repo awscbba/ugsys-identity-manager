@@ -172,6 +172,29 @@ class AuthService:
                         },
                     )
 
+            # If the account just got locked on this attempt, return 423 immediately
+            if user.is_locked():
+                retry_after = int(
+                    (user.account_locked_until - datetime.now(UTC)).total_seconds()  # type: ignore[operator]
+                )
+                retry_after = max(retry_after, 0)
+                logger.warning(
+                    "auth_service.authenticate.account_locked",
+                    user_id=str(user.id),
+                    retry_after_seconds=retry_after,
+                )
+                raise AccountLockedError(
+                    message=(
+                        f"Account {user.id} locked after 5 failed attempts"
+                        f" until {user.account_locked_until}"
+                    ),
+                    user_message=(
+                        "Account is temporarily locked due to too many failed login attempts"
+                    ),
+                    error_code="ACCOUNT_LOCKED",
+                    additional_data={"retry_after_seconds": retry_after},
+                )
+
             logger.warning(
                 "auth_service.authenticate.invalid_credentials",
                 user_id=str(user.id),
