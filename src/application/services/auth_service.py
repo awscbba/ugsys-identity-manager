@@ -378,10 +378,12 @@ class AuthService:
             logger.warning("auth_service.validate_token.invalid", error=str(e))
             return {"valid": False}
         logger.info("auth_service.validate_token.valid", sub=str(payload.get("sub")))
+        raw_roles = payload.get("roles")
+        roles_list: list[str] = [str(r) for r in raw_roles] if isinstance(raw_roles, list) else []
         return {
             "valid": True,
             "sub": str(payload.get("sub")),
-            "roles": list(payload.get("roles", [])),  # type: ignore[arg-type]
+            "roles": roles_list,
             "type": str(payload.get("type")),
         }
 
@@ -404,7 +406,10 @@ class AuthService:
                 user_message="Invalid client credentials",
                 error_code="INVALID_CLIENT_CREDENTIALS",
             )
-        roles: list[str] = [str(r) for r in list(account.get("roles", []))]  # type: ignore[arg-type]
+        raw_account_roles = account.get("roles")
+        roles: list[str] = (
+            [str(r) for r in raw_account_roles] if isinstance(raw_account_roles, list) else []
+        )
         token = self._token_service.create_service_token(client_id=command.client_id, roles=roles)
         logger.info("auth_service.service_token.issued", client_id=command.client_id)
         # Service tokens don't have a refresh token
@@ -522,7 +527,8 @@ class AuthService:
                 error_code="INVALID_TOKEN",
             )
 
-        exp = int(payload.get("exp", 0))
+        exp_raw = payload.get("exp", 0)
+        exp = int(exp_raw) if isinstance(exp_raw, (int, float, str)) else 0
         await self._token_blacklist.add(jti, exp)
 
         logger.info(

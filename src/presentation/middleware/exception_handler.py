@@ -46,15 +46,17 @@ def _build_error_envelope(
     code: str,
     message: str,
     request_id: str,
-    extra: dict | None = None,
-) -> dict:
+    extra: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Build the standard error envelope."""
-    envelope: dict = {
+    envelope: dict[str, object] = {
         "error": {"code": code, "message": message},
         "meta": {"request_id": request_id},
     }
     if extra:
-        envelope["error"].update(extra)
+        error_dict = envelope["error"]
+        if isinstance(error_dict, dict):
+            error_dict.update(extra)
     return envelope
 
 
@@ -71,7 +73,7 @@ async def domain_exception_handler(request: Request, exc: DomainError) -> JSONRe
         path=request.url.path,
     )
 
-    extra: dict = {}
+    extra: dict[str, object] = {}
 
     # Special handling for AccountLockedError — include retry_after_seconds
     if isinstance(exc, AccountLockedError):

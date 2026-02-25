@@ -5,7 +5,7 @@ from uuid import UUID
 
 import boto3
 import structlog
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, ConditionBase
 
 from src.domain.entities.user import User, UserRole, UserStatus
 from src.domain.repositories.user_repository import UserRepository
@@ -42,11 +42,12 @@ class DynamoDBUserRepository(UserRepository):
         return self._from_item(items[0]) if items else None
 
     async def list_all(self) -> list[User]:
-        items: list[dict] = []  # type: ignore[type-arg]
+        items: list[dict[str, object]] = []
         kwargs: dict[str, object] = {}
         while True:
             resp = self._table.scan(**kwargs)  # type: ignore[arg-type]
-            items.extend(resp.get("Items", []))
+            raw = resp.get("Items", [])
+            items.extend(raw)  # type: ignore[arg-type]
             last = resp.get("LastEvaluatedKey")
             if not last:
                 break
@@ -65,7 +66,7 @@ class DynamoDBUserRepository(UserRepository):
         role_filter: str | None = None,
     ) -> tuple[list[User], int]:
         """Return (users_page, total_count) with optional filters."""
-        filter_expr = Attr("sk").eq("PROFILE")
+        filter_expr: ConditionBase = Attr("sk").eq("PROFILE")
 
         if status_filter:
             filter_expr = filter_expr & Attr("status").eq(status_filter)
@@ -73,11 +74,11 @@ class DynamoDBUserRepository(UserRepository):
         if role_filter:
             filter_expr = filter_expr & Attr("roles").contains(role_filter)
 
-        all_items: list[dict] = []  # type: ignore[type-arg]
+        all_items: list[dict[str, object]] = []
         kwargs: dict[str, object] = {"FilterExpression": filter_expr}
         while True:
             resp = self._table.scan(**kwargs)  # type: ignore[arg-type]
-            all_items.extend(resp.get("Items", []))
+            all_items.extend(resp.get("Items", []))  # type: ignore[arg-type]
             last = resp.get("LastEvaluatedKey")
             if not last:
                 break

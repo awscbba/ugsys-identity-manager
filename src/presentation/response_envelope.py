@@ -3,12 +3,14 @@
 from math import ceil
 
 
-def success_response(data: object, request_id: str) -> dict:
+def success_response(data: object, request_id: str) -> dict[str, object]:
     """Wrap a single resource response in the standard envelope."""
     return {"data": data, "meta": {"request_id": request_id}}
 
 
-def list_response(data: list, total: int, page: int, page_size: int, request_id: str) -> dict:
+def list_response(
+    data: list[object], total: int, page: int, page_size: int, request_id: str
+) -> dict[str, object]:
     """Wrap a paginated list response in the standard envelope."""
     return {
         "data": data,

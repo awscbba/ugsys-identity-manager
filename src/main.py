@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from src.config import Settings
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 import structlog
 from fastapi import FastAPI
 from mangum import Mangum
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
 
 from src.config import settings
 from src.domain.exceptions import DomainError
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("shutdown", service=settings.service_name)
 
 
-def _load_service_accounts(cfg: Settings) -> dict:  # type: ignore[type-arg]
+def _load_service_accounts(cfg: Settings) -> dict[str, dict[str, object]]:
     """Load service accounts from config. In prod these come from Secrets Manager."""
     import json
     import os
@@ -51,7 +53,14 @@ def _load_service_accounts(cfg: Settings) -> dict:  # type: ignore[type-arg]
     raw = os.environ.get("SERVICE_ACCOUNTS_JSON", "")
     if raw:
         try:
-            return dict(json.loads(raw))  # type: ignore[arg-type]
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                result: dict[str, dict[str, object]] = {}
+                for k, v in loaded.items():
+                    if isinstance(v, dict):
+                        result[str(k)] = v
+                return result
+            return {}
         except Exception:
             logger.warning("service_accounts.parse_failed")
     return {}
@@ -141,7 +150,11 @@ if settings.xray_enabled:
 app.add_middleware(CorrelationIdMiddleware)
 
 # Exception handlers — registered before routers
-app.add_exception_handler(DomainError, domain_exception_handler)
+ExcHandler = Callable[[StarletteRequest, Exception], Awaitable[StarletteResponse]]
+app.add_exception_handler(
+    DomainError,
+    cast(ExcHandler, domain_exception_handler),
+)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # Routers

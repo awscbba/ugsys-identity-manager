@@ -39,7 +39,9 @@ class UserService:
     async def _verify_admin(self, admin_id: str) -> User:
         """Look up admin user and verify they have admin or super_admin role."""
         admin = await self._user_repo.find_by_id(UUID(admin_id))
-        is_admin = admin.has_role(UserRole.ADMIN) or admin.has_role(UserRole.SUPER_ADMIN)
+        is_admin = admin is not None and (
+            admin.has_role(UserRole.ADMIN) or admin.has_role(UserRole.SUPER_ADMIN)
+        )
         if not admin or not is_admin:
             raise AuthorizationError(
                 message=f"User {admin_id} is not an admin",

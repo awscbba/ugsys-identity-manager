@@ -93,7 +93,7 @@ async def list_users(
         admin_id=requester_id,
     )
     users, total = await user_service.list_users(query)
-    users_data = [_user_dict(u) for u in users]
+    users_data: list[object] = [_user_dict(u) for u in users]
     request_id = correlation_id_var.get("")
     return list_response(users_data, total, page, page_size, request_id)
 

@@ -26,7 +26,8 @@ def _require_admin(credentials: HTTPAuthorizationCredentials, token_service: Tok
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
-    roles: list[str] = list(payload.get("roles", []))  # type: ignore[arg-type]
+    raw_roles = payload.get("roles")
+    roles: list[str] = [str(r) for r in raw_roles] if isinstance(raw_roles, list) else []
     if "admin" not in roles and "super_admin" not in roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
@@ -35,7 +36,7 @@ def _require_admin(credentials: HTTPAuthorizationCredentials, token_service: Tok
 async def list_roles(
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
-) -> dict:  # type: ignore[type-arg]
+) -> dict[str, object]:
     """List all available roles in the system."""
     _require_admin(credentials, token_service)
     roles = [{"name": r.value, "description": _role_description(r)} for r in UserRole]
