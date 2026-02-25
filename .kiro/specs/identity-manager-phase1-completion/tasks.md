@@ -363,6 +363,72 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
   - Verify domain exceptions are used everywhere (no raw ValueError/PermissionError from app/domain)
   - Verify all API responses use envelope format
 
+- [ ] 13. Moto integration tests — DynamoDB adapters
+  - [ ] 13.1 Write integration tests for DynamoDBUserRepository in `tests/integration/test_dynamodb_user_repo.py`
+    - Use `moto` `mock_aws` decorator to spin up a fake DynamoDB table matching the real schema (PK=`pk`, SK=`sk`, GSI `status-index`)
+    - Test `save()` then `find_by_id()` round-trips all User fields including new security/verification fields
+    - Test `find_by_email()` returns correct user
+    - Test deserialization of a legacy item (missing new fields) uses correct defaults for `failed_login_attempts`, `email_verified`, `require_password_change`, `is_admin`
+    - Test `update()` persists changed fields
+    - Test `list_paginated(page=1, page_size=2)` with 5 users returns 2 users and total=5
+    - Test `list_paginated` with `status_filter="active"` returns only active users
+    - Test `find_by_verification_token()` returns the matching user
+    - Test `find_by_verification_token()` returns None for unknown token
+    - _Requirements: 13.1, 13.2, 13.4_
+
+  - [ ] 13.2 Write integration tests for DynamoDBTokenBlacklistRepository in `tests/integration/test_dynamodb_token_blacklist.py`
+    - Use `moto` `mock_aws` decorator to spin up a fake DynamoDB table with PK=`jti` and TTL attribute `ttl`
+    - Test `add(jti, ttl_epoch)` writes item with correct attributes
+    - Test `is_blacklisted(jti)` returns `True` for a jti that was added
+    - Test `is_blacklisted(jti)` returns `False` for an unknown jti
+    - Test adding the same jti twice does not raise (idempotent)
+    - _Requirements: 4.3, 13.3_
+
+- [ ] 14. Moto integration tests — Full HTTP layer (httpx + moto + FastAPI)
+  - [ ] 14.1 Create integration test fixtures in `tests/integration/conftest.py`
+    - `aws_credentials` fixture: set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` to moto-safe dummy values via `monkeypatch`
+    - `dynamodb_tables` fixture (depends on `aws_credentials`): use `moto` `mock_aws` to create both DynamoDB tables (`ugsys-identity-manager-users-test` and `ugsys-identity-test-token-blacklist`) with correct key schemas and GSI
+    - `app_client` fixture (depends on `dynamodb_tables`): set `ENVIRONMENT=test`, `DYNAMODB_TABLE_NAME=ugsys-identity-manager-users-test`, `TOKEN_BLACKLIST_TABLE_NAME=ugsys-identity-test-token-blacklist`, `JWT_SECRET_KEY=test-secret`, `JWT_ALGORITHM=HS256`; import and call `create_app()` (or use the existing `app`); return `httpx.AsyncClient(app=app, base_url="http://test")`
+    - _No requirements reference — test infrastructure_
+
+  - [ ] 14.2 Write HTTP integration tests for auth flows in `tests/integration/test_auth_http.py`
+    - **Register → verify-email → login happy path**: POST `/api/v1/auth/register`, extract `verification_token` from the published event (or directly from DynamoDB), POST `/api/v1/auth/verify-email`, POST `/api/v1/auth/login` → assert 200 with `access_token`
+    - **Register duplicate email**: POST register twice with same email → assert 409 with `error.code == "EMAIL_ALREADY_EXISTS"` (or `"CONFLICT"`)
+    - **Login before email verification**: register then immediately login → assert 401 with `error.email_not_verified == true`
+    - **Login with wrong password**: register + verify + login with wrong password → assert 401
+    - **Account lockout**: register + verify + 5 failed logins → assert 423 with `error.retry_after_seconds > 0`
+    - **Logout + token reuse**: register + verify + login → logout with access token → attempt to use same token → assert 401 with revoked message
+    - **Refresh token**: register + verify + login → POST `/api/v1/auth/refresh` with refresh_token → assert new access_token
+    - **Forgot password + reset**: register + verify + POST `/api/v1/auth/forgot-password` → assert 200; POST `/api/v1/auth/reset-password` with token from event → assert 200
+    - _Requirements: 1–7, 11_
+
+  - [ ] 14.3 Write HTTP integration tests for user management in `tests/integration/test_users_http.py`
+    - **GET /api/v1/users (admin)**: create 3 users, login as admin, GET users → assert paginated envelope with `meta.total == 3`
+    - **GET /api/v1/users (non-admin)**: login as regular member → assert 403
+    - **Suspend user**: admin suspends a user → assert 200; suspended user tries to login → assert 401
+    - **Activate user**: admin activates a suspended user → assert 200; user can login again
+    - **Require password change**: admin sets flag → user logs in → response includes `require_password_change: true`
+    - **GET /api/v1/users/{id}**: admin fetches specific user → assert envelope with correct user data
+    - _Requirements: 10, 12_
+
+- [ ] 15. Smoke test script against deployed API
+  - [ ] 15.1 Create `scripts/smoke_test.py` inside `ugsys-identity-manager/`
+    - Accept `BASE_URL` from environment variable (e.g. `IDENTITY_API_URL=https://<id>.execute-api.us-east-1.amazonaws.com/prod`)
+    - Test sequence using `httpx` (sync):
+      1. GET `/health` → assert `{"status": "ok"}`
+      2. POST `/api/v1/auth/register` with unique email → assert 201, response has `data.user_id`
+      3. POST `/api/v1/auth/login` with same credentials before verification → assert 401 with `email_not_verified`
+      4. POST `/api/v1/auth/resend-verification` → assert 200
+      5. POST `/api/v1/auth/forgot-password` → assert 200 (anti-enumeration)
+    - Print PASS/FAIL for each step with response status and body summary
+    - Exit with code 1 if any step fails
+    - _No requirements reference — operational verification_
+
+  - [ ] 15.2 Document the smoke test usage in `README.md`
+    - Add a "Testing" section explaining how to run smoke tests: `IDENTITY_API_URL=<url> uv run python scripts/smoke_test.py`
+    - Note that full register→verify→login flow requires checking CloudWatch logs or EventBridge for the verification token (since email delivery is async)
+    - _No requirements reference — documentation_
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP
@@ -374,3 +440,5 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
 - Application layer tasks (4, 6) depend only on mockable domain ports
 - Infrastructure tasks (8) require moto for integration tests
 - Presentation tasks (10) use FastAPI TestClient with mocked services
+- Integration tests (13–14) use `moto` — no real AWS calls, no cost, safe to run in CI
+- Smoke test (15) requires `IDENTITY_API_URL` env var pointing at the deployed API Gateway endpoint

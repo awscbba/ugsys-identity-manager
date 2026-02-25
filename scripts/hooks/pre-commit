@@ -8,16 +8,22 @@ if [[ "$BRANCH" == "main" ]]; then
 fi
 FAILED=0
 echo -e "${YELLOW}── Ruff lint ──${NC}"
-if uv tool run ruff check src/ tests/ --quiet 2>&1; then
+if just lint --quiet 2>&1; then
   echo -e "  ${GREEN}✓ ruff lint${NC}"
 else
   echo -e "  ${RED}✗ ruff lint failed — run: just lint${NC}"; FAILED=1
 fi
 echo -e "${YELLOW}── Ruff format ──${NC}"
-if uv tool run ruff format --check src/ tests/ --quiet 2>&1; then
+if just format-check --quiet 2>&1; then
   echo -e "  ${GREEN}✓ ruff format${NC}"
 else
   echo -e "  ${RED}✗ ruff format failed — run: just format${NC}"; FAILED=1
+fi
+echo -e "${YELLOW}── Unit tests ──${NC}"
+if just test-unit 2>&1; then
+  echo -e "  ${GREEN}✓ unit tests${NC}"
+else
+  echo -e "  ${RED}✗ unit tests failed — run: just test-unit${NC}"; FAILED=1
 fi
 echo ""
 if [ $FAILED -ne 0 ]; then echo -e "${RED}✗ Pre-commit checks failed.${NC}"; exit 1; fi
