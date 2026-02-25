@@ -11,3 +11,7 @@ dist/
 cdk.out/
 .devbox/
 .coverage
+
+# Temp/scratch files
+*.txt
+!requirements.txt
