@@ -104,7 +104,7 @@ step("response has user_id", bool(user_id), str(body))
 print("\n3. Login before email verification")
 r = client.post("/api/v1/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
 step("POST /login → 401 (not verified)", r.status_code == 401, f"HTTP {r.status_code}")
-error_code = r.json().get("error", "")
+error_code = r.json().get("error", {}).get("code", "")
 step("error code is EMAIL_NOT_VERIFIED", error_code == "EMAIL_NOT_VERIFIED", error_code)
 
 # 4. Resend verification (anti-enumeration — always 200)
