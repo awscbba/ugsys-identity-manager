@@ -13,6 +13,7 @@ from src.application.commands.verify_email import VerifyEmailCommand
 from src.application.services.auth_service import AuthService
 from src.domain.entities.user import User, UserRole, UserStatus
 from src.domain.exceptions import (
+    AccountLockedError,
     AuthenticationError,
     ConflictError,
     ValidationError,
@@ -283,9 +284,12 @@ async def test_authenticate_fifth_failure_publishes_account_locked_event() -> No
     repo.find_by_email.return_value = user
     svc = make_service(repo, hasher=hasher, events=events)
 
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(AccountLockedError) as exc_info:
         await svc.authenticate(AuthenticateCommand(email="user@example.com", password="wrong"))
 
+    assert exc_info.value.error_code == "ACCOUNT_LOCKED"
+    assert "retry_after_seconds" in exc_info.value.additional_data
+    assert "locked" in exc_info.value.user_message.lower()
     published_types = [c.kwargs["detail_type"] for c in events.publish.call_args_list]
     assert "identity.auth.login_failed" in published_types
     assert "identity.auth.account_locked" in published_types
