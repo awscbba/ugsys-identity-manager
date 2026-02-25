@@ -68,7 +68,7 @@ def _load_service_accounts(cfg: Settings) -> dict[str, dict[str, object]]:
 
 def _wire_dependencies(app: FastAPI) -> None:
     """Wire infrastructure adapters into presentation layer via dependency overrides."""
-    from passlib.context import CryptContext
+    import bcrypt as _bcrypt_lib
 
     from src.application.services.auth_service import AuthService
     from src.application.services.user_service import UserService
@@ -107,14 +107,14 @@ def _wire_dependencies(app: FastAPI) -> None:
         region=settings.aws_region,
     )
 
-    _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
     class _BcryptHasher:
         def hash(self, password: str) -> str:
-            return str(_pwd_ctx.hash(password))
+            return _bcrypt_lib.hashpw(password.encode("utf-8"), _bcrypt_lib.gensalt()).decode(
+                "utf-8"
+            )
 
         def verify(self, plain: str, hashed: str) -> bool:
-            return bool(_pwd_ctx.verify(plain, hashed))
+            return bool(_bcrypt_lib.checkpw(plain.encode("utf-8"), hashed.encode("utf-8")))
 
     auth_service = AuthService(
         user_repo=user_repo,
