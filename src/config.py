@@ -31,7 +31,8 @@ def _resolve_jwt_secret() -> str:
         client = boto3.client("secretsmanager", region_name=region)
         response = client.get_secret_value(SecretId=secret_arn)
         secret = response.get("SecretString", "{}")
-        return json.loads(secret).get("jwt_secret_key", "")
+        parsed: dict[str, str] = json.loads(secret)
+        return str(parsed.get("jwt_secret_key", ""))
 
     return "change-me-in-production"
 
