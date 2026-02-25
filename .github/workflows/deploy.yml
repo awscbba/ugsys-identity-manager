@@ -34,7 +34,15 @@ jobs:
       - name: Build Lambda package
         run: |
           uv export --no-dev --no-hashes -o requirements.txt
-          uv pip install -r requirements.txt -t dist/ --quiet
+          pip install \
+            -r requirements.txt \
+            -t dist/ \
+            --quiet \
+            --python-version 3.13 \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --abi cp313 \
+            --only-binary :all:
           cp -r src dist/
           cp src/main.py dist/handler.py
 
@@ -100,7 +108,7 @@ jobs:
                 {
                   "type": "section",
                   "fields": [
-                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`"},
+                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.actor }}`"},
                     {"type": "mrkdwn", "text": "*By:*\n${{ github.actor }}"}
                   ]
                 },
