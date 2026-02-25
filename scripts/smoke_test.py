@@ -232,7 +232,7 @@ if lockout_ready:
         json={"email": LOCKOUT_EMAIL, "password": "WrongPass@1!"},
     )
     step("5th failed attempt → 423 (locked)", r.status_code == 423, f"HTTP {r.status_code}: {r.text[:120]}")
-    retry_after = r.json().get("data", {}).get("retry_after_seconds")
+    retry_after = r.json().get("error", {}).get("retry_after_seconds")
     step(
         "response has retry_after_seconds",
         isinstance(retry_after, (int, float)) and retry_after > 0,
