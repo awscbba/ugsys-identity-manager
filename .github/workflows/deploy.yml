@@ -37,6 +37,8 @@ jobs:
 
       - name: Build Lambda package
         run: |
+          # Always start from a clean dist/ to prevent stale packages accumulating
+          rm -rf dist/
           uv export --no-dev --no-hashes -o requirements.txt
           pip install \
             -r requirements.txt \
@@ -47,6 +49,11 @@ jobs:
             --implementation cp \
             --abi cp313 \
             --only-binary :all:
+          # Explicitly remove passlib — it is not a direct dependency but can
+          # appear as a transitive artifact from older bcrypt wheels. Its
+          # detect_wrap_bug() runs at import time and crashes with a ValueError
+          # when passwords exceed 72 bytes, breaking all Lambda invocations.
+          find dist/ -name "passlib*" -exec rm -rf {} + 2>/dev/null || true
           cp -r src dist/
           cp src/main.py dist/handler.py
 
@@ -112,7 +119,7 @@ jobs:
                 {
                   "type": "section",
                   "fields": [
-                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.actor }}`"},
+                    {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`"},
                     {"type": "mrkdwn", "text": "*By:*\n${{ github.actor }}"}
                   ]
                 },

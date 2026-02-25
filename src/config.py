@@ -1,11 +1,45 @@
 """Application settings — loaded from environment variables."""
 
+import json
+import os
+
+import boto3
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_environment() -> str:
+    """Accept APP_ENV (CDK convention) or ENVIRONMENT — APP_ENV takes precedence."""
+    return os.environ.get("APP_ENV", os.environ.get("ENVIRONMENT", "dev"))
+
+
+def _resolve_jwt_secret() -> str:
+    """
+    Resolve JWT secret key.
+
+    Priority:
+      1. JWT_SECRET_KEY env var (local dev / test override)
+      2. SECRETS_MANAGER_JWT_SECRET_ARN env var → fetch from Secrets Manager (prod Lambda)
+      3. Fallback default (dev only — will fail Bandit S105 in prod if not overridden)
+    """
+    direct = os.environ.get("JWT_SECRET_KEY", "")
+    if direct:
+        return direct
+
+    secret_arn = os.environ.get("SECRETS_MANAGER_JWT_SECRET_ARN", "")
+    if secret_arn:
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_arn)
+        secret = response.get("SecretString", "{}")
+        parsed: dict[str, str] = json.loads(secret)
+        return str(parsed.get("jwt_secret_key", ""))
+
+    return "change-me-in-production"
 
 
 class Settings(BaseSettings):
     service_name: str = "ugsys-identity-manager"
-    environment: str = "dev"
+    environment: str = _resolve_environment()
     aws_region: str = "us-east-1"
     dynamodb_table_prefix: str = "ugsys"
     version: str = "0.1.0"
@@ -16,9 +50,9 @@ class Settings(BaseSettings):
     dynamodb_table_name: str = ""  # if set, overrides the computed property
     token_blacklist_table_name: str = ""  # if set, overrides the computed property
 
-    # JWT — override in prod via env / Secrets Manager
-    jwt_secret_key: str = "change-me-in-production"  # noqa: S105
-    jwt_algorithm: str = "RS256"
+    # JWT — HS256 default; resolved via _resolve_jwt_secret() above
+    jwt_secret_key: str = _resolve_jwt_secret()
+    jwt_algorithm: str = "HS256"
     jwt_access_ttl_minutes: int = 30
     jwt_refresh_ttl_days: int = 7
 
