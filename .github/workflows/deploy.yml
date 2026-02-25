@@ -34,7 +34,10 @@ jobs:
       - name: Build Lambda package
         run: |
           uv export --no-dev --no-hashes -o requirements.txt
-          uv pip install -r requirements.txt -t dist/ --quiet
+          uv pip install -r requirements.txt -t dist/ --quiet \
+            --python-version 3.13 \
+            --platform manylinux2014_x86_64 \
+            --only-binary :all:
           cp -r src dist/
           cp src/main.py dist/handler.py
 
