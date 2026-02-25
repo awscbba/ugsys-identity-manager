@@ -18,3 +18,16 @@ def test_defaults() -> None:
     assert s.service_name == "ugsys-identity-manager"
     assert s.aws_region == "us-east-1"
     assert s.xray_enabled is False
+    assert s.version == "0.1.0"
+    assert s.event_bus_name == "ugsys-platform-bus"
+    assert s.token_blacklist_table_name == ""
+
+
+def test_token_blacklist_table_property() -> None:
+    s = Settings(environment="staging")
+    assert s.token_blacklist_table == "ugsys-identity-staging-token-blacklist"
+
+
+def test_token_blacklist_table_override() -> None:
+    s = Settings(token_blacklist_table_name="custom-blacklist", environment="staging")
+    assert s.token_blacklist_table == "custom-blacklist"

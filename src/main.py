@@ -1,16 +1,29 @@
 """Composition root — wires all dependencies and starts the FastAPI app."""
 
-from collections.abc import AsyncGenerator
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from src.config import Settings
 
 import structlog
 from fastapi import FastAPI
 from mangum import Mangum
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
 
 from src.config import settings
+from src.domain.exceptions import DomainError
 from src.infrastructure.logging import configure_logging
-from src.presentation.api.v1 import auth, health, users
+from src.presentation.api.v1 import auth, health, roles, users
 from src.presentation.middleware.correlation_id import CorrelationIdMiddleware
+from src.presentation.middleware.exception_handler import (
+    domain_exception_handler,
+    unhandled_exception_handler,
+)
 from src.presentation.middleware.rate_limiting import RateLimitMiddleware
 from src.presentation.middleware.request_logging import RequestLoggingMiddleware
 from src.presentation.middleware.security_headers import SecurityHeadersMiddleware
@@ -32,6 +45,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("shutdown", service=settings.service_name)
 
 
+def _load_service_accounts(cfg: Settings) -> dict[str, dict[str, object]]:
+    """Load service accounts from config. In prod these come from Secrets Manager."""
+    import json
+    import os
+
+    raw = os.environ.get("SERVICE_ACCOUNTS_JSON", "")
+    if raw:
+        try:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                result: dict[str, dict[str, object]] = {}
+                for k, v in loaded.items():
+                    if isinstance(v, dict):
+                        result[str(k)] = v
+                return result
+            return {}
+        except Exception:
+            logger.warning("service_accounts.parse_failed")
+    return {}
+
+
 def _wire_dependencies(app: FastAPI) -> None:
     """Wire infrastructure adapters into presentation layer via dependency overrides."""
     from passlib.context import CryptContext
@@ -39,20 +73,36 @@ def _wire_dependencies(app: FastAPI) -> None:
     from src.application.services.auth_service import AuthService
     from src.application.services.user_service import UserService
     from src.infrastructure.adapters.jwt_token_service import JWTTokenService
-    from src.infrastructure.messaging.event_publisher import EventPublisher
+    from src.infrastructure.messaging.event_publisher import EventBridgePublisher
     from src.infrastructure.persistence.dynamodb_user_repository import DynamoDBUserRepository
     from src.presentation.api.v1.auth import get_auth_service
+    from src.presentation.api.v1.roles import get_token_service as get_roles_token_service
     from src.presentation.api.v1.users import get_token_service, get_user_service
 
     user_repo = DynamoDBUserRepository(
         table_name=settings.users_table,
         region=settings.aws_region,
     )
+
+    # Token blacklist and password validator — wired for AuthService lockout/gates
+    from src.domain.value_objects.password_validator import PasswordValidator
+    from src.infrastructure.persistence.dynamodb_token_blacklist import (
+        DynamoDBTokenBlacklistRepository,
+    )
+
+    password_validator = PasswordValidator()
+
+    token_blacklist = DynamoDBTokenBlacklistRepository(
+        table_name=settings.token_blacklist_table,
+        region=settings.aws_region,
+    )
+
     token_service = JWTTokenService(
         secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
+        token_blacklist=token_blacklist,
     )
-    event_publisher = EventPublisher(
+    event_publisher = EventBridgePublisher(
         bus_name=settings.event_bus_name,
         region=settings.aws_region,
     )
@@ -70,19 +120,23 @@ def _wire_dependencies(app: FastAPI) -> None:
         user_repo=user_repo,
         token_service=token_service,
         password_hasher=_BcryptHasher(),
+        token_blacklist=token_blacklist,
+        password_validator=password_validator,
         event_publisher=event_publisher,
+        service_accounts=_load_service_accounts(settings),
     )
     user_service = UserService(user_repo=user_repo, event_publisher=event_publisher)
 
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_user_service] = lambda: user_service
     app.dependency_overrides[get_token_service] = lambda: token_service
+    app.dependency_overrides[get_roles_token_service] = lambda: token_service
 
 
 app = FastAPI(
     title="ugsys Identity Manager",
     version="0.1.0",
-    docs_url="/docs",
+    docs_url="/docs" if settings.environment != "prod" else None,
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -95,10 +149,19 @@ if settings.xray_enabled:
     app.add_middleware(TracingMiddleware, service_name=settings.service_name)
 app.add_middleware(CorrelationIdMiddleware)
 
+# Exception handlers — registered before routers
+ExcHandler = Callable[[StarletteRequest, Exception], Awaitable[StarletteResponse]]
+app.add_exception_handler(
+    DomainError,
+    cast(ExcHandler, domain_exception_handler),
+)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
 # Routers
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+app.include_router(roles.router, prefix="/api/v1")
 
 # Lambda handler
 handler = Mangum(app, lifespan="on")

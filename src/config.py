@@ -8,11 +8,13 @@ class Settings(BaseSettings):
     environment: str = "dev"
     aws_region: str = "us-east-1"
     dynamodb_table_prefix: str = "ugsys"
-    event_bus_name: str = "ugsys-event-bus"
+    version: str = "0.1.0"
+    event_bus_name: str = "ugsys-platform-bus"
     log_level: str = "INFO"
 
     # DynamoDB — matches CDK stack: ugsys-identity-manager-users-{env}
     dynamodb_table_name: str = ""  # if set, overrides the computed property
+    token_blacklist_table_name: str = ""  # if set, overrides the computed property
 
     # JWT — override in prod via env / Secrets Manager
     jwt_secret_key: str = "change-me-in-production"  # noqa: S105
@@ -29,6 +31,12 @@ class Settings(BaseSettings):
             return self.dynamodb_table_name
         # Matches CDK IdentityManagerStack table name
         return f"ugsys-identity-manager-users-{self.environment}"
+
+    @property
+    def token_blacklist_table(self) -> str:
+        if self.token_blacklist_table_name:
+            return self.token_blacklist_table_name
+        return f"ugsys-identity-{self.environment}-token-blacklist"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

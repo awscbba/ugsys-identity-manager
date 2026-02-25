@@ -1,6 +1,6 @@
 """Unit tests for UserService admin/RBAC use cases."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -13,6 +13,7 @@ from src.application.commands.update_user import (
 )
 from src.application.services.user_service import UserService
 from src.domain.entities.user import User, UserRole, UserStatus
+from src.domain.exceptions import AuthorizationError, NotFoundError
 
 
 def _make_user(**kwargs) -> User:  # type: ignore[no-untyped-def]
@@ -35,12 +36,12 @@ def repo() -> AsyncMock:
 
 
 @pytest.fixture
-def events() -> MagicMock:
-    return MagicMock()
+def events() -> AsyncMock:
+    return AsyncMock()
 
 
 @pytest.fixture
-def service(repo: AsyncMock, events: MagicMock) -> UserService:
+def service(repo: AsyncMock, events: AsyncMock) -> UserService:
     return UserService(user_repo=repo, event_publisher=events)
 
 
@@ -59,7 +60,7 @@ async def test_update_profile_success(service: UserService, repo: AsyncMock) -> 
 async def test_update_profile_forbidden(service: UserService, repo: AsyncMock) -> None:
     user = _make_user()
     repo.find_by_id = AsyncMock(return_value=user)
-    with pytest.raises(PermissionError):
+    with pytest.raises(AuthorizationError):
         await service.update_profile(
             UpdateProfileCommand(user_id=user.id, requester_id=str(uuid4()), full_name="X")
         )
@@ -67,7 +68,7 @@ async def test_update_profile_forbidden(service: UserService, repo: AsyncMock) -
 
 async def test_update_profile_not_found(service: UserService, repo: AsyncMock) -> None:
     repo.find_by_id = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError):
         await service.update_profile(
             UpdateProfileCommand(user_id=uuid4(), requester_id=str(uuid4()), full_name="X")
         )
@@ -77,7 +78,7 @@ async def test_update_profile_not_found(service: UserService, repo: AsyncMock) -
 
 
 async def test_assign_role_success(
-    service: UserService, repo: AsyncMock, events: MagicMock
+    service: UserService, repo: AsyncMock, events: AsyncMock
 ) -> None:
     user = _make_user()
     repo.find_by_id = AsyncMock(return_value=user)
@@ -85,15 +86,15 @@ async def test_assign_role_success(
         AssignRoleCommand(user_id=user.id, role=UserRole.ADMIN, requester_id=str(uuid4()))
     )
     assert UserRole.ADMIN in updated.roles
-    events.publish.assert_called_once()
+    events.publish.assert_awaited_once()
     call_kwargs = events.publish.call_args
     assert call_kwargs.kwargs["detail_type"] == "identity.user.role_changed"
-    assert call_kwargs.kwargs["detail"]["action"] == "assigned"
+    assert call_kwargs.kwargs["payload"]["action"] == "assigned"
 
 
 async def test_assign_role_not_found(service: UserService, repo: AsyncMock) -> None:
     repo.find_by_id = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError):
         await service.assign_role(
             AssignRoleCommand(user_id=uuid4(), role=UserRole.ADMIN, requester_id=str(uuid4()))
         )
@@ -103,7 +104,7 @@ async def test_assign_role_not_found(service: UserService, repo: AsyncMock) -> N
 
 
 async def test_remove_role_success(
-    service: UserService, repo: AsyncMock, events: MagicMock
+    service: UserService, repo: AsyncMock, events: AsyncMock
 ) -> None:
     user = _make_user(roles=[UserRole.MEMBER, UserRole.ADMIN])
     repo.find_by_id = AsyncMock(return_value=user)
@@ -111,25 +112,25 @@ async def test_remove_role_success(
         RemoveRoleCommand(user_id=user.id, role=UserRole.ADMIN, requester_id=str(uuid4()))
     )
     assert UserRole.ADMIN not in updated.roles
-    events.publish.assert_called_once()
-    assert events.publish.call_args.kwargs["detail"]["action"] == "removed"
+    events.publish.assert_awaited_once()
+    assert events.publish.call_args.kwargs["payload"]["action"] == "removed"
 
 
 # ── deactivate ────────────────────────────────────────────────────────────────
 
 
-async def test_deactivate_success(service: UserService, repo: AsyncMock, events: MagicMock) -> None:
+async def test_deactivate_success(service: UserService, repo: AsyncMock, events: AsyncMock) -> None:
     user = _make_user()
     repo.find_by_id = AsyncMock(return_value=user)
     updated = await service.deactivate(
         DeactivateUserCommand(user_id=user.id, requester_id=str(uuid4()))
     )
     assert updated.status == UserStatus.INACTIVE
-    events.publish.assert_called_once()
-    assert events.publish.call_args.kwargs["detail_type"] == "identity.user.deleted"
+    events.publish.assert_awaited_once()
+    assert events.publish.call_args.kwargs["detail_type"] == "identity.user.deactivated"
 
 
 async def test_deactivate_not_found(service: UserService, repo: AsyncMock) -> None:
     repo.find_by_id = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError):
         await service.deactivate(DeactivateUserCommand(user_id=uuid4(), requester_id=str(uuid4())))

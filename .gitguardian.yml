@@ -1,0 +1,18 @@
+# GitGuardian configuration — allowlist for test fixtures
+# These are fake values used in unit tests, not real secrets.
+version: 2
+
+ignore-paths:
+  - tests/
+
+ignore-known-secrets:
+  - name: "test-token fixture"
+    match: "test-token"
+  - name: "hashed_pw fixture"
+    match: "hashed_pw"
+  - name: "Str0ng!Pass test password"
+    match: "Str0ng!Pass"
+  - name: "some-jti test value"
+    match: "some-jti"
+  - name: "valid-tok test value"
+    match: "valid-tok"
