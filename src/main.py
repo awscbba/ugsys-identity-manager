@@ -14,9 +14,14 @@ from fastapi import FastAPI
 from mangum import Mangum
 
 from src.config import settings
+from src.domain.exceptions import DomainError
 from src.infrastructure.logging import configure_logging
 from src.presentation.api.v1 import auth, health, roles, users
 from src.presentation.middleware.correlation_id import CorrelationIdMiddleware
+from src.presentation.middleware.exception_handler import (
+    domain_exception_handler,
+    unhandled_exception_handler,
+)
 from src.presentation.middleware.rate_limiting import RateLimitMiddleware
 from src.presentation.middleware.request_logging import RequestLoggingMiddleware
 from src.presentation.middleware.security_headers import SecurityHeadersMiddleware
@@ -59,7 +64,7 @@ def _wire_dependencies(app: FastAPI) -> None:
     from src.application.services.auth_service import AuthService
     from src.application.services.user_service import UserService
     from src.infrastructure.adapters.jwt_token_service import JWTTokenService
-    from src.infrastructure.messaging.event_publisher import EventPublisher
+    from src.infrastructure.messaging.event_publisher import EventBridgePublisher
     from src.infrastructure.persistence.dynamodb_user_repository import DynamoDBUserRepository
     from src.presentation.api.v1.auth import get_auth_service
     from src.presentation.api.v1.roles import get_token_service as get_roles_token_service
@@ -69,11 +74,26 @@ def _wire_dependencies(app: FastAPI) -> None:
         table_name=settings.users_table,
         region=settings.aws_region,
     )
+
+    # Token blacklist and password validator — wired for AuthService lockout/gates
+    from src.domain.value_objects.password_validator import PasswordValidator
+    from src.infrastructure.persistence.dynamodb_token_blacklist import (
+        DynamoDBTokenBlacklistRepository,
+    )
+
+    password_validator = PasswordValidator()
+
+    token_blacklist = DynamoDBTokenBlacklistRepository(
+        table_name=settings.token_blacklist_table,
+        region=settings.aws_region,
+    )
+
     token_service = JWTTokenService(
         secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
+        token_blacklist=token_blacklist,
     )
-    event_publisher = EventPublisher(
+    event_publisher = EventBridgePublisher(
         bus_name=settings.event_bus_name,
         region=settings.aws_region,
     )
@@ -91,6 +111,8 @@ def _wire_dependencies(app: FastAPI) -> None:
         user_repo=user_repo,
         token_service=token_service,
         password_hasher=_BcryptHasher(),
+        token_blacklist=token_blacklist,
+        password_validator=password_validator,
         event_publisher=event_publisher,
         service_accounts=_load_service_accounts(settings),
     )
@@ -105,7 +127,7 @@ def _wire_dependencies(app: FastAPI) -> None:
 app = FastAPI(
     title="ugsys Identity Manager",
     version="0.1.0",
-    docs_url="/docs",
+    docs_url="/docs" if settings.environment != "prod" else None,
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -117,6 +139,10 @@ app.add_middleware(RateLimitMiddleware)
 if settings.xray_enabled:
     app.add_middleware(TracingMiddleware, service_name=settings.service_name)
 app.add_middleware(CorrelationIdMiddleware)
+
+# Exception handlers — registered before routers
+app.add_exception_handler(DomainError, domain_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # Routers
 app.include_router(health.router)

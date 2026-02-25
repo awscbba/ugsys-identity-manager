@@ -5,8 +5,10 @@ from uuid import uuid4
 
 import pytest
 
+from src.application.queries.list_users import ListUsersQuery
 from src.application.services.user_service import UserService
 from src.domain.entities.user import User, UserRole, UserStatus
+from src.domain.exceptions import AuthorizationError, NotFoundError
 
 
 def make_user(roles: list[UserRole] | None = None) -> User:
@@ -20,22 +22,38 @@ def make_user(roles: list[UserRole] | None = None) -> User:
     )
 
 
+def make_admin() -> User:
+    return User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed",
+        full_name="Admin",
+        status=UserStatus.ACTIVE,
+        roles=[UserRole.ADMIN],
+    )
+
+
 @pytest.mark.asyncio
 async def test_list_users_admin_succeeds() -> None:
-    repo = AsyncMock()
+    admin = make_admin()
     users = [make_user(), make_user()]
-    repo.list_all.return_value = users
+    repo = AsyncMock()
+    repo.find_by_id.return_value = admin
+    repo.list_paginated.return_value = (users, 2)
     svc = UserService(user_repo=repo)
-    result = await svc.list_users(requester_id=str(uuid4()), is_admin=True)
+    result, total = await svc.list_users(ListUsersQuery(admin_id=str(admin.id)))
     assert len(result) == 2
+    assert total == 2
 
 
 @pytest.mark.asyncio
 async def test_list_users_non_admin_raises() -> None:
+    non_admin = make_user()
     repo = AsyncMock()
+    repo.find_by_id.return_value = non_admin
     svc = UserService(user_repo=repo)
-    with pytest.raises(PermissionError, match="Admin access required"):
-        await svc.list_users(requester_id=str(uuid4()), is_admin=False)
+    with pytest.raises(AuthorizationError):
+        await svc.list_users(ListUsersQuery(admin_id=str(non_admin.id)))
 
 
 @pytest.mark.asyncio
@@ -65,7 +83,7 @@ async def test_get_user_roles_non_admin_other_user_raises() -> None:
     user = make_user()
     repo.find_by_id.return_value = user
     svc = UserService(user_repo=repo)
-    with pytest.raises(PermissionError, match="Access denied"):
+    with pytest.raises(AuthorizationError):
         await svc.get_user_roles(user_id=user.id, requester_id=str(uuid4()), is_admin=False)
 
 
@@ -74,5 +92,5 @@ async def test_get_user_roles_not_found_raises() -> None:
     repo = AsyncMock()
     repo.find_by_id.return_value = None
     svc = UserService(user_repo=repo)
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError):
         await svc.get_user_roles(user_id=uuid4(), requester_id=str(uuid4()), is_admin=True)

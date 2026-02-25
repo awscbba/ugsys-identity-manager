@@ -4,18 +4,30 @@ NOTE: Uses RS256 in production. HS256 is kept here only for local dev convenienc
 the algorithm is injected via config so prod always passes RS256.
 """
 
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from jose import JWTError, jwt
 
+from src.domain.exceptions import AuthenticationError
+from src.domain.repositories.token_blacklist_repository import TokenBlacklistRepository
 from src.domain.repositories.token_service import TokenService
 
 
 class JWTTokenService(TokenService):
-    def __init__(self, secret_key: str, algorithm: str = "RS256") -> None:
+    def __init__(
+        self,
+        secret_key: str,
+        algorithm: str = "RS256",
+        token_blacklist: TokenBlacklistRepository | None = None,
+    ) -> None:
         self._secret = secret_key
         self._algorithm = algorithm
+        self._token_blacklist = token_blacklist
         self._access_ttl = timedelta(minutes=30)
         self._refresh_ttl = timedelta(days=7)
         self._reset_ttl = timedelta(hours=1)
@@ -49,13 +61,45 @@ class JWTTokenService(TokenService):
             )
             if payload.get("alg") == "none" or self._algorithm == "none":
                 raise ValueError("Algorithm 'none' is not allowed")
-            return payload
         except JWTError as e:
-            raise ValueError(f"Invalid token: {e}") from e
+            raise AuthenticationError(
+                message=f"Invalid token: {e}",
+                user_message="Invalid or expired token",
+                error_code="INVALID_TOKEN",
+            ) from e
+
+        # Check blacklist if configured
+        if self._token_blacklist is not None:
+            jti = str(payload.get("jti", ""))
+            if jti:
+                is_blocked = self._check_blacklist(jti)
+                if is_blocked:
+                    raise AuthenticationError(
+                        message=f"Token {jti} has been revoked",
+                        user_message="Token has been revoked",
+                        error_code="TOKEN_REVOKED",
+                    )
+
+        return payload
+
+    def _check_blacklist(self, jti: str) -> bool:
+        """Run the async is_blacklisted check from a sync context."""
+        assert self._token_blacklist is not None
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop — safe to use asyncio.run
+            return asyncio.run(self._token_blacklist.is_blacklisted(jti))
+
+        # Already inside an async loop (e.g. FastAPI request) — run in a thread
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, self._token_blacklist.is_blacklisted(jti)).result()
 
     def _encode(self, payload: dict[str, object], ttl: timedelta) -> str:
         expire = datetime.now(UTC) + ttl
         result: str = jwt.encode(
-            {**payload, "exp": expire}, self._secret, algorithm=self._algorithm
+            {**payload, "jti": str(uuid4()), "exp": expire},
+            self._secret,
+            algorithm=self._algorithm,
         )
         return result

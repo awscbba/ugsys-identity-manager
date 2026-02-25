@@ -3,10 +3,15 @@
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Security, status
+from fastapi import APIRouter, Depends, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from src.application.commands.admin_user import (
+    ActivateUserCommand,
+    RequirePasswordChangeCommand,
+    SuspendUserCommand,
+)
 from src.application.commands.update_user import (
     AssignRoleCommand,
     DeactivateUserCommand,
@@ -14,9 +19,12 @@ from src.application.commands.update_user import (
     UpdateProfileCommand,
 )
 from src.application.queries.get_user import GetUserQuery
+from src.application.queries.list_users import ListUsersQuery
 from src.application.services.user_service import UserService
 from src.domain.entities.user import UserRole
 from src.domain.repositories.token_service import TokenService
+from src.presentation.middleware.correlation_id import correlation_id_var
+from src.presentation.response_envelope import list_response, success_response
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/users", tags=["users"])
@@ -45,20 +53,8 @@ def _extract_claims(
     credentials: HTTPAuthorizationCredentials,
     token_service: TokenService,
 ) -> dict:  # type: ignore[type-arg]
-    try:
-        return token_service.verify_token(credentials.credentials)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
-
-
-def _require_admin(claims: dict) -> None:  # type: ignore[type-arg]
-    roles: list[str] = list(claims.get("roles", []))
-    if "admin" not in roles and "super_admin" not in roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    """Extract and verify JWT claims. Domain exceptions propagate to exception_handler."""
+    return token_service.verify_token(credentials.credentials)
 
 
 def _user_dict(user: object) -> dict:  # type: ignore[type-arg]
@@ -74,20 +70,35 @@ def _user_dict(user: object) -> dict:  # type: ignore[type-arg]
     }
 
 
+# ── List users (admin, paginated) ────────────────────────────────────────────
+
+
 @router.get("")
 async def list_users(
+    page: int = 1,
+    page_size: int = 20,
+    status_filter: str | None = None,
+    role: str | None = None,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
     user_service: UserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
-) -> list[dict]:  # type: ignore[type-arg]
+) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
-    roles: list[str] = list(claims.get("roles", []))
-    is_admin = "admin" in roles or "super_admin" in roles
-    try:
-        users = await user_service.list_users(requester_id=str(claims["sub"]), is_admin=is_admin)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    return [_user_dict(u) for u in users]
+    requester_id = str(claims["sub"])
+    query = ListUsersQuery(
+        page=page,
+        page_size=page_size,
+        status_filter=status_filter,
+        role_filter=role,
+        admin_id=requester_id,
+    )
+    users, total = await user_service.list_users(query)
+    users_data = [_user_dict(u) for u in users]
+    request_id = correlation_id_var.get("")
+    return list_response(users_data, total, page, page_size, request_id)
+
+
+# ── Get current user ─────────────────────────────────────────────────────────
 
 
 @router.get("/me")
@@ -98,13 +109,14 @@ async def get_me(
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
     user_id = UUID(str(claims["sub"]))
-    try:
-        user = await user_service.get_user(
-            GetUserQuery(user_id=user_id, requester_id=str(user_id), is_admin=False)
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    user = await user_service.get_user(
+        GetUserQuery(user_id=user_id, requester_id=str(user_id), is_admin=False)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+# ── Get user by ID ───────────────────────────────────────────────────────────
 
 
 @router.get("/{user_id}")
@@ -118,15 +130,14 @@ async def get_user(
     requester_id = str(claims["sub"])
     roles: list[str] = list(claims.get("roles", []))
     is_admin = "admin" in roles or "super_admin" in roles
-    try:
-        user = await user_service.get_user(
-            GetUserQuery(user_id=user_id, requester_id=requester_id, is_admin=is_admin)
-        )
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    user = await user_service.get_user(
+        GetUserQuery(user_id=user_id, requester_id=requester_id, is_admin=is_admin)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+# ── Update profile ───────────────────────────────────────────────────────────
 
 
 @router.patch("/{user_id}")
@@ -139,19 +150,18 @@ async def update_profile(
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
-    try:
-        user = await user_service.update_profile(
-            UpdateProfileCommand(
-                user_id=user_id,
-                requester_id=requester_id,
-                full_name=body.full_name,
-            )
+    user = await user_service.update_profile(
+        UpdateProfileCommand(
+            user_id=user_id,
+            requester_id=requester_id,
+            full_name=body.full_name,
         )
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+# ── Role management ──────────────────────────────────────────────────────────
 
 
 @router.put("/{user_id}/roles/{role}")
@@ -163,14 +173,11 @@ async def assign_role(
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
-    _require_admin(claims)
-    try:
-        user = await user_service.assign_role(
-            AssignRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    user = await user_service.assign_role(
+        AssignRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
 
 
 @router.delete("/{user_id}/roles/{role}", status_code=status.HTTP_200_OK)
@@ -182,14 +189,11 @@ async def remove_role(
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
-    _require_admin(claims)
-    try:
-        user = await user_service.remove_role(
-            RemoveRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    user = await user_service.remove_role(
+        RemoveRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
 
 
 @router.get("/{user_id}/roles")
@@ -203,15 +207,16 @@ async def get_user_roles(
     requester_id = str(claims["sub"])
     roles: list[str] = list(claims.get("roles", []))
     is_admin = "admin" in roles or "super_admin" in roles
-    try:
-        user_roles = await user_service.get_user_roles(
-            user_id=user_id, requester_id=requester_id, is_admin=is_admin
-        )
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return {"user_id": str(user_id), "roles": [r.value for r in user_roles]}
+    user_roles = await user_service.get_user_roles(
+        user_id=user_id, requester_id=requester_id, is_admin=is_admin
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(
+        {"user_id": str(user_id), "roles": [r.value for r in user_roles]}, request_id
+    )
+
+
+# ── Deactivate user ──────────────────────────────────────────────────────────
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
@@ -222,11 +227,59 @@ async def deactivate_user(
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
-    _require_admin(claims)
-    try:
-        user = await user_service.deactivate(
-            DeactivateUserCommand(user_id=user_id, requester_id=str(claims["sub"]))
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return _user_dict(user)
+    user = await user_service.deactivate(
+        DeactivateUserCommand(user_id=user_id, requester_id=str(claims["sub"]))
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+# ── Admin operations ─────────────────────────────────────────────────────────
+
+
+@router.post("/{user_id}/suspend")
+async def suspend_user(
+    user_id: UUID,
+    credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
+    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    token_service: TokenService = Depends(get_token_service),  # noqa: B008
+) -> dict:  # type: ignore[type-arg]
+    claims = _extract_claims(credentials, token_service)
+    requester_id = str(claims["sub"])
+    user = await user_service.suspend_user(
+        SuspendUserCommand(user_id=user_id, admin_id=requester_id)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+@router.post("/{user_id}/activate")
+async def activate_user(
+    user_id: UUID,
+    credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
+    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    token_service: TokenService = Depends(get_token_service),  # noqa: B008
+) -> dict:  # type: ignore[type-arg]
+    claims = _extract_claims(credentials, token_service)
+    requester_id = str(claims["sub"])
+    user = await user_service.activate_user(
+        ActivateUserCommand(user_id=user_id, admin_id=requester_id)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)
+
+
+@router.post("/{user_id}/require-password-change")
+async def require_password_change(
+    user_id: UUID,
+    credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
+    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    token_service: TokenService = Depends(get_token_service),  # noqa: B008
+) -> dict:  # type: ignore[type-arg]
+    claims = _extract_claims(credentials, token_service)
+    requester_id = str(claims["sub"])
+    user = await user_service.require_password_change(
+        RequirePasswordChangeCommand(user_id=user_id, admin_id=requester_id)
+    )
+    request_id = correlation_id_var.get("")
+    return success_response(_user_dict(user), request_id)

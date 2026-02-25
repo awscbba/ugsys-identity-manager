@@ -24,3 +24,19 @@ class UserRepository(ABC):
 
     @abstractmethod
     async def delete(self, user_id: UUID) -> None: ...
+
+    @abstractmethod
+    async def list_paginated(
+        self,
+        page: int,
+        page_size: int,
+        status_filter: str | None = None,
+        role_filter: str | None = None,
+    ) -> tuple[list[User], int]:
+        """Return (users_page, total_count) with optional filters."""
+        ...
+
+    @abstractmethod
+    async def find_by_verification_token(self, token: str) -> User | None:
+        """Find a user by their email verification token."""
+        ...

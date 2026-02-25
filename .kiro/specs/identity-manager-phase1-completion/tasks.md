@@ -6,8 +6,8 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
 
 ## Tasks
 
-- [ ] 1. Domain exception hierarchy and User entity extensions
-  - [ ] 1.1 Create domain exception hierarchy in `src/domain/exceptions.py`
+- [x] 1. Domain exception hierarchy and User entity extensions
+  - [x] 1.1 Create domain exception hierarchy in `src/domain/exceptions.py`
     - Implement `DomainError` base with `message`, `user_message`, `error_code`, `additional_data`
     - Implement `ValidationError`, `NotFoundError`, `ConflictError`, `AuthenticationError`, `AuthorizationError`, `AccountLockedError`, `RepositoryError`, `ExternalServiceError`
     - _Requirements: 8.1_
@@ -18,7 +18,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test `DomainError` is an `Exception` subclass
     - _Requirements: 8.1_
 
-  - [ ] 1.3 Extend User entity with new fields and methods in `src/domain/entities/user.py`
+  - [x] 1.3 Extend User entity with new fields and methods in `src/domain/entities/user.py`
     - Add fields: `failed_login_attempts`, `account_locked_until`, `last_login_at`, `last_password_change`, `require_password_change`, `email_verified`, `email_verification_token`, `email_verified_at`, `is_admin`
     - Add `UserRole` enum values: `MODERATOR`, `AUDITOR`, `GUEST`, `SYSTEM`
     - Add `UserStatus` enum value: `PENDING_VERIFICATION` (if missing)
@@ -49,8 +49,8 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 5: record_successful_login resets attempts and sets last_login_at**
     - **Validates: Requirements 1.7, 2.4, 3.5**
 
-- [ ] 2. Password validator and domain ports
-  - [ ] 2.1 Create PasswordValidator value object in `src/domain/value_objects/password_validator.py`
+- [x] 2. Password validator and domain ports
+  - [x] 2.1 Create PasswordValidator value object in `src/domain/value_objects/password_validator.py`
     - Implement `validate(password: str) -> list[str]` returning list of violated rules
     - Rules: min 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char from `!@#$%^&*()_+-=[]{}|;:,.<>?`
     - _Requirements: 7.1, 7.2, 7.3_
@@ -66,36 +66,36 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 17: Password validator correctly identifies all violated rules**
     - **Validates: Requirements 7.1, 7.2, 7.3**
 
-  - [ ] 2.4 Create TokenBlacklistRepository ABC in `src/domain/repositories/token_blacklist_repository.py`
+  - [x] 2.4 Create TokenBlacklistRepository ABC in `src/domain/repositories/token_blacklist_repository.py`
     - Define `add(jti: str, ttl_epoch: int) -> None` and `is_blacklisted(jti: str) -> bool` abstract methods
     - _Requirements: 4.3_
 
-  - [ ] 2.5 Create EventPublisher ABC in `src/domain/repositories/event_publisher.py`
+  - [x] 2.5 Create EventPublisher ABC in `src/domain/repositories/event_publisher.py`
     - Define `publish(detail_type: str, payload: dict[str, Any]) -> None` abstract method
     - Replace existing `EventPublisherProtocol` usage with this ABC
     - _Requirements: 9.2_
 
-  - [ ] 2.6 Extend UserRepository ABC in `src/domain/repositories/user_repository.py`
+  - [x] 2.6 Extend UserRepository ABC in `src/domain/repositories/user_repository.py`
     - Add `list_paginated(page, page_size, status_filter, role_filter) -> tuple[list[User], int]`
     - Add `find_by_verification_token(token: str) -> User | None`
     - _Requirements: 12.2, 5.3_
 
-  - [ ] 2.7 Extend TokenService ABC in `src/domain/repositories/token_service.py`
+  - [x] 2.7 Extend TokenService ABC in `src/domain/repositories/token_service.py`
     - Ensure `jti` claim is part of the contract (tokens must include jti)
     - Add blacklist check requirement to `verify_token` contract
     - _Requirements: 4.1, 4.4_
 
-- [ ] 3. Checkpoint — Domain layer complete
+- [x] 3. Checkpoint — Domain layer complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Application layer — AuthService security hardening
-  - [ ] 4.1 Create new command DTOs
+- [x] 4. Application layer — AuthService security hardening
+  - [x] 4.1 Create new command DTOs
     - Create `src/application/commands/verify_email.py` with `VerifyEmailCommand`
     - Create `src/application/commands/resend_verification.py` with `ResendVerificationCommand`
     - Create `src/application/commands/logout.py` with `LogoutCommand`
     - _Requirements: 5.3, 6.1, 4.2_
 
-  - [ ] 4.2 Modify AuthService for account lockout and login gates
+  - [x] 4.2 Modify AuthService for account lockout and login gates
     - Add `token_blacklist` and `password_validator` constructor dependencies
     - In `authenticate()`: check `is_locked()` → raise `AccountLockedError` with `retry_after_seconds`
     - In `authenticate()`: on invalid password → call `record_failed_login()`, persist, publish `identity.auth.login_failed`; on 5th failure also publish `identity.auth.account_locked`
@@ -114,7 +114,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test successful login calls `record_successful_login()` and publishes `identity.auth.login_success`
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 3.1, 3.3, 3.5_
 
-  - [ ] 4.4 Implement verify_email, resend_verification, and logout in AuthService
+  - [x] 4.4 Implement verify_email, resend_verification, and logout in AuthService
     - `verify_email(token)`: find by verification token, validate not expired (24h), call `user.verify_email()`, publish `identity.user.activated`
     - `resend_verification(email)`: find user, if `pending_verification` generate new token, publish `identity.auth.verification_requested`; always return success
     - `logout(access_token)`: extract jti, add to blacklist with TTL = token exp
@@ -129,7 +129,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test logout blacklists the token jti
     - _Requirements: 4.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4_
 
-  - [ ] 4.6 Migrate AuthService to domain exceptions and add password validation
+  - [x] 4.6 Migrate AuthService to domain exceptions and add password validation
     - Replace all `ValueError` raises with `ConflictError` (duplicate email) and `AuthenticationError` (invalid credentials)
     - Add `PasswordValidator.validate()` call in `register()` and `reset_password()`; raise `ValidationError` on failure
     - Update `register()` to set `status=pending_verification`, generate verification token, publish `identity.user.registered` (not `identity.user.created`)
@@ -162,7 +162,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Validates: Requirements 5.1**
     - **Property 13: Registration publishes identity.user.registered event**
     - **Validates: Requirements 5.2, 9.3**
-    - **Property 14: Email verification activates user and clears token**
+    - **Property 14: Email verification activates user and clears  token**
     - **Validates: Requirements 5.3**
     - **Property 15: Invalid verification tokens are rejected**
     - **Validates: Requirements 5.4**
@@ -173,16 +173,16 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 19: AuthService raises correct domain exception types**
     - **Validates: Requirements 8.2, 8.3**
 
-- [ ] 5. Checkpoint — AuthService complete
+- [x] 5. Checkpoint — AuthService complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Application layer — UserService admin operations and pagination
-  - [ ] 6.1 Create admin command DTOs and ListUsersQuery
+- [x] 6. Application layer — UserService admin operations and pagination
+  - [x] 6.1 Create admin command DTOs and ListUsersQuery
     - Create `src/application/commands/admin_user.py` with `SuspendUserCommand`, `ActivateUserCommand`, `RequirePasswordChangeCommand`
     - Create `src/application/queries/list_users.py` with `ListUsersQuery`
     - _Requirements: 10.1, 10.2, 10.3, 12.1_
 
-  - [ ] 6.2 Implement admin operations and pagination in UserService
+  - [x] 6.2 Implement admin operations and pagination in UserService
     - `suspend_user(cmd)`: verify admin, set status=inactive, persist, publish `identity.user.deactivated`
     - `activate_user(cmd)`: verify admin, set status=active, persist, publish `identity.user.activated`
     - `require_password_change(cmd)`: verify admin, set flag, persist
@@ -215,11 +215,11 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 29: Status and role filters produce correct subsets**
     - **Validates: Requirements 12.5**
 
-- [ ] 7. Checkpoint — Application layer complete
+- [x] 7. Checkpoint — Application layer complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Infrastructure layer — DynamoDB adapters and JWT changes
-  - [ ] 8.1 Extend DynamoDBUserRepository for new fields and queries
+- [x] 8. Infrastructure layer — DynamoDB adapters and JWT changes
+  - [x] 8.1 Extend DynamoDBUserRepository for new fields and queries
     - Update `_to_item` / `_from_item` to serialize/deserialize all new User fields
     - Handle backward compatibility: missing attributes default to safe values
     - Implement `list_paginated()` with offset-based pagination; use `status-index` GSI when status filter provided
@@ -239,7 +239,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 31: DynamoDB deserialization handles missing new fields with defaults**
     - **Validates: Requirements 13.2**
 
-  - [ ] 8.4 Create DynamoDBTokenBlacklistRepository in `src/infrastructure/persistence/dynamodb_token_blacklist.py`
+  - [x] 8.4 Create DynamoDBTokenBlacklistRepository in `src/infrastructure/persistence/dynamodb_token_blacklist.py`
     - Implement `add(jti, ttl_epoch)` writing `{jti, ttl}` to `ugsys-identity-{env}-token-blacklist`
     - Implement `is_blacklisted(jti)` checking item existence
     - _Requirements: 4.3, 13.3_
@@ -249,7 +249,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test `is_blacklisted` returns True for existing jti, False for unknown
     - _Requirements: 4.3, 13.3_
 
-  - [ ] 8.6 Modify JWTTokenService for jti and blacklist integration
+  - [x] 8.6 Modify JWTTokenService for jti and blacklist integration
     - Add `jti` (UUID4) claim to every token created (access, refresh, service)
     - Add `token_blacklist: TokenBlacklistRepository` constructor parameter
     - In `verify_token()`: check blacklist for jti before returning payload; raise `AuthenticationError("Token has been revoked")` if blacklisted
@@ -262,22 +262,22 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test `verify_token` succeeds when jti is not blacklisted
     - _Requirements: 4.1, 4.4, 4.5_
 
-  - [ ] 8.8 Update EventBridgePublisher to implement EventPublisher ABC
+  - [x] 8.8 Update EventBridgePublisher to implement EventPublisher ABC
     - Migrate from existing `EventPublisher` class to implement the new domain `EventPublisher` ABC
     - Use `ugsys-event-lib` envelope format with `event_id`, `event_version`, `timestamp`, `correlation_id`, `payload`
     - Hardcode source to `"ugsys.identity-manager"`
     - _Requirements: 9.1, 9.2_
 
-  - [ ] 8.9 Update `src/config.py` for event bus name and token blacklist table
+  - [x] 8.9 Update `src/config.py` for event bus name and token blacklist table
     - Change `event_bus_name` default to `"ugsys-platform-bus"` (was `"ugsys-event-bus"`)
     - Add `token_blacklist_table_name` field with computed property for `ugsys-identity-{env}-token-blacklist`
     - _Requirements: 9.1, 4.3_
 
-- [ ] 9. Checkpoint — Infrastructure layer complete
+- [x] 9. Checkpoint — Infrastructure layer complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Presentation layer — Exception handler, response envelope, and router updates
-  - [ ] 10.1 Create exception handler in `src/presentation/middleware/exception_handler.py`
+- [x] 10. Presentation layer — Exception handler, response envelope, and router updates
+  - [x] 10.1 Create exception handler in `src/presentation/middleware/exception_handler.py`
     - Implement `domain_exception_handler` mapping each domain exception to correct HTTP status
     - Special handling: `AccountLockedError` → include `retry_after_seconds`; `EMAIL_NOT_VERIFIED` → include `email_not_verified: true`; `PASSWORD_CHANGE_REQUIRED` → include `require_password_change: true`
     - Implement `unhandled_exception_handler` returning 500 with generic message, logging full details
@@ -297,7 +297,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **Property 21: Domain exception handler maps exceptions to correct HTTP status codes**
     - **Validates: Requirements 8.6, 11.3**
 
-  - [ ] 10.4 Create response envelope utilities in `src/presentation/response_envelope.py`
+  - [x] 10.4 Create response envelope utilities in `src/presentation/response_envelope.py`
     - Implement `success_response(data, request_id)` → `{ "data": ..., "meta": { "request_id": ... } }`
     - Implement `list_response(data, total, page, page_size, request_id)` → includes pagination metadata with `total_pages = ceil(total / page_size)`
     - _Requirements: 11.1, 11.2_
@@ -308,7 +308,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test `total_pages` calculation (ceil division)
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 10.6 Update auth router with new endpoints and envelope wrapping
+  - [x] 10.6 Update auth router with new endpoints and envelope wrapping
     - Add `POST /api/v1/auth/verify-email` (public)
     - Add `POST /api/v1/auth/resend-verification` (public)
     - Add `POST /api/v1/auth/logout` (Bearer required)
@@ -326,7 +326,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test validate-token without service token returns 401
     - _Requirements: 5.3, 6.2, 4.2, 14.1, 14.2, 14.3, 14.4_
 
-  - [ ] 10.8 Update users router with admin endpoints and pagination
+  - [x] 10.8 Update users router with admin endpoints and pagination
     - Add `POST /api/v1/users/{id}/suspend` (admin only)
     - Add `POST /api/v1/users/{id}/activate` (admin only)
     - Add `POST /api/v1/users/{id}/require-password-change` (admin only)
@@ -344,8 +344,8 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test page_size > 100 is capped
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 12.1, 12.4_
 
-- [ ] 11. Wire everything in main.py
-  - [ ] 11.1 Update `src/main.py` composition root
+- [x] 11. Wire everything in main.py
+  - [x] 11.1 Update `src/main.py` composition root
     - Register `domain_exception_handler` and `unhandled_exception_handler`
     - Wire `DynamoDBTokenBlacklistRepository` and inject into `JWTTokenService` and `AuthService`
     - Wire `PasswordValidator` into `AuthService`
@@ -357,7 +357,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - Test exception handlers are registered for `DomainError` and `Exception`
     - _Requirements: 8.6, 8.7_
 
-- [ ] 12. Final checkpoint — Full integration verification
+- [x] 12. Final checkpoint — Full integration verification
   - Ensure all tests pass, ask the user if questions arise.
   - Verify all 14 requirements are covered by implementation
   - Verify domain exceptions are used everywhere (no raw ValueError/PermissionError from app/domain)
