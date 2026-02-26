@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import boto3
 import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.domain.entities.outbox_event import OutboxEvent
 from src.domain.exceptions import RepositoryError
@@ -98,6 +98,7 @@ def outbox_table(aws_credentials: None) -> object:
 @pytest.fixture()
 def repo(outbox_table: object) -> DynamoDBOutboxRepository:
     import aioboto3
+
     return DynamoDBOutboxRepository(
         table_name=_OUTBOX_TABLE,
         region=_REGION,
@@ -282,6 +283,6 @@ async def test_client_error_raises_repository_error(repo: DynamoDBOutboxReposito
         await repo.save(_make_event())
 
     assert exc_info.value.error_code == "REPOSITORY_ERROR"
-    assert "An unexpected error occurred" == exc_info.value.user_message
+    assert exc_info.value.user_message == "An unexpected error occurred"
     # Internal message must NOT be exposed as user_message
     assert exc_info.value.message != exc_info.value.user_message
