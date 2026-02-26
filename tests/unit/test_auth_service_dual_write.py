@@ -513,14 +513,14 @@ class TestForgotPasswordTokenSecurity:
 
         event_publisher = AsyncMock()
         svc = make_auth_service(user_repo=user_repo, event_publisher=event_publisher)
-        raw_token = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.signature"
-        svc._token_service.create_password_reset_token.return_value = raw_token
+        fake_jwt_string = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.signature"
+        svc._token_service.create_password_reset_token.return_value = fake_jwt_string
 
         await svc.forgot_password(ForgotPasswordCommand(email="user@example.com"))
 
         payload = event_publisher.publish.call_args[1]["payload"]
         token_id = payload.get("token_id", "")
-        assert token_id != raw_token, "token_id must NOT equal the raw JWT string"
+        assert token_id != fake_jwt_string, "token_id must NOT equal the raw JWT string"
 
     @pytest.mark.asyncio
     async def test_forgot_password_payload_contains_user_id_and_email(self) -> None:

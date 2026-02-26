@@ -18,13 +18,13 @@ else
   echo -e "  ${YELLOW}⚠ gitleaks not installed — skipping (install: https://github.com/gitleaks/gitleaks)${NC}"
 fi
 echo -e "${YELLOW}── Ruff lint ──${NC}"
-if just lint --quiet 2>&1; then
+if just lint 2>&1; then
   echo -e "  ${GREEN}✓ ruff lint${NC}"
 else
   echo -e "  ${RED}✗ ruff lint failed — run: just lint${NC}"; FAILED=1
 fi
 echo -e "${YELLOW}── Ruff format ──${NC}"
-if just format-check --quiet 2>&1; then
+if just format-check 2>&1; then
   echo -e "  ${GREEN}✓ ruff format${NC}"
 else
   echo -e "  ${RED}✗ ruff format failed — run: just format${NC}"; FAILED=1

@@ -1,5 +1,1 @@
-# Test fixture — not a real secret
-475b3c330910d05a6a312da1f109896337c9dc50:tests/unit/infrastructure/test_jwt_token_service.py:generic-api-key:33
-
-# Test JWT token fixture — not a real secret
-475b3c330910d05a6a312da1f109896337c9dc50:tests/unit/test_auth_service_dual_write.py:generic-api-key:516
+# No suppressions needed — test fixtures use non-triggering variable names

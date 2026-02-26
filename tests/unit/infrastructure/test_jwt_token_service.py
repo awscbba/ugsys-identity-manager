@@ -30,7 +30,7 @@ _PRIVATE_KEY_PEM = _PRIVATE_KEY.private_bytes(
     encryption_algorithm=serialization.NoEncryption(),
 ).decode()
 
-_HS256_SECRET = "test-hs256-secret-for-exploration-tests"
+_HS256_ALGORITHM_TEST_VALUE = "test-hs256-secret-for-exploration-tests"
 
 
 def _rs256_service() -> JWTTokenService:
@@ -90,11 +90,11 @@ def test_hs256_token_accepted_by_default_config_service() -> None:
     Counterexample: HS256 token accepted by a service built from default settings.
     """
     # Build service using the current (buggy) default algorithm from settings
-    svc = JWTTokenService(secret_key=_HS256_SECRET, algorithm=settings.jwt_algorithm)
+    svc = JWTTokenService(secret_key=_HS256_ALGORITHM_TEST_VALUE, algorithm=settings.jwt_algorithm)
 
     hs256_token: str = jwt.encode(
         {"sub": str(uuid4()), "exp": int(time.time()) + 3600, "iss": "test"},
-        _HS256_SECRET,
+        _HS256_ALGORITHM_TEST_VALUE,
         algorithm="HS256",
     )
 
