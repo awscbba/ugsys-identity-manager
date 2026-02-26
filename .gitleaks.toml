@@ -1,0 +1,15 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+
+title = "Gitleaks config for ugsys-identity-manager"
+
+# Allowlist test files that contain intentional dummy/fixture values.
+# These are NOT real secrets — they are test-only placeholder strings
+# used to verify that the service correctly REJECTS non-RS256 tokens
+# and that token_id != raw JWT string.
+[allowlist]
+description = "Test fixture files with intentional dummy token values"
+paths = [
+    '''tests/unit/infrastructure/test_jwt_token_service\.py''',
+    '''tests/unit/test_auth_service_dual_write\.py''',
+]

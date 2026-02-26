@@ -47,8 +47,10 @@ def test_security_headers_present() -> None:
     resp = client.get("/ping")
     assert resp.headers["x-content-type-options"] == "nosniff"
     assert resp.headers["x-frame-options"] == "DENY"
-    assert resp.headers["x-xss-protection"] == "1; mode=block"
+    # Hardened: XSS protection disabled — CSP is the correct defense (per security.md)
+    assert resp.headers["x-xss-protection"] == "0"
     assert "max-age=31536000" in resp.headers["strict-transport-security"]
+    assert "preload" in resp.headers["strict-transport-security"]
     assert resp.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
@@ -75,18 +77,17 @@ def test_rate_limit_allows_normal_traffic() -> None:
 
 
 def test_rate_limit_blocks_after_threshold() -> None:
-    import src.presentation.middleware.rate_limiting as rl_module
+    """Rate limiter must return 429 after burst limit is exceeded."""
+    # Each TestClient gets a fresh middleware instance with its own counters
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
 
-    # Reset the in-memory store so previous tests don't bleed in
-    rl_module._request_log.clear()
-    rl_module._MAX_REQUESTS = 3  # lower threshold for test speed
+    @app.get("/ping")
+    async def ping() -> dict:  # type: ignore[type-arg]
+        return {"ok": True}
 
-    client = TestClient(_app_with(RateLimitMiddleware))
-    responses = [client.get("/ping") for _ in range(5)]
+    client = TestClient(app, raise_server_exceptions=False)
+    # Send 15 rapid requests from the same IP — burst limit is 10/sec
+    responses = [client.get("/ping") for _ in range(15)]
     status_codes = [r.status_code for r in responses]
-
     assert 429 in status_codes
-
-    # Restore default
-    rl_module._MAX_REQUESTS = 60
-    rl_module._request_log.clear()

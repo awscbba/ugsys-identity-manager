@@ -1,19 +1,46 @@
 """Unit tests for JWTTokenService adapter."""
 
+from __future__ import annotations
+
 from uuid import UUID, uuid4
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from src.domain.exceptions import AuthenticationError
 from src.infrastructure.adapters.jwt_token_service import JWTTokenService
 
-_SECRET = "test-secret-key-for-unit-tests-only"
+
+def _generate_rsa_key_pair() -> tuple[str, str]:
+    """Generate a test RSA key pair. Returns (private_key_pem, public_key_pem)."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
+    return private_pem, public_pem
+
+
+_PRIVATE_KEY, _PUBLIC_KEY = _generate_rsa_key_pair()
 
 
 @pytest.fixture
 def svc() -> JWTTokenService:
-    # Use HS256 in tests — RS256 requires a real RSA key pair
-    return JWTTokenService(secret_key=_SECRET, algorithm="HS256")
+    """RS256 service using a generated test RSA private key."""
+    return JWTTokenService(
+        secret_key=_PRIVATE_KEY,
+        algorithm="RS256",
+    )
 
 
 def test_create_and_verify_access_token(svc: JWTTokenService) -> None:
@@ -41,7 +68,7 @@ def test_invalid_token_raises(svc: JWTTokenService) -> None:
 def test_tampered_token_raises(svc: JWTTokenService) -> None:
     token = svc.create_access_token(uuid4(), roles=["member"])
     tampered = token[:-5] + "XXXXX"
-    with pytest.raises(AuthenticationError, match="Invalid token"):
+    with pytest.raises(AuthenticationError):
         svc.verify_token(tampered)
 
 

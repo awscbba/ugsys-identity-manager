@@ -5,7 +5,6 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 
 from src.application.commands.admin_user import (
     ActivateUserCommand,
@@ -18,9 +17,10 @@ from src.application.commands.update_user import (
     RemoveRoleCommand,
     UpdateProfileCommand,
 )
+from src.application.dtos.user_dtos import UpdateProfileRequest
+from src.application.interfaces.user_service import IUserService
 from src.application.queries.get_user import GetUserQuery
 from src.application.queries.list_users import ListUsersQuery
-from src.application.services.user_service import UserService
 from src.domain.entities.user import UserRole
 from src.domain.repositories.token_service import TokenService
 from src.presentation.middleware.correlation_id import correlation_id_var
@@ -31,15 +31,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 bearer = HTTPBearer()
 
 
-class UpdateProfileRequest(BaseModel):
-    full_name: str
-
-
-class AssignRoleRequest(BaseModel):
-    role: UserRole
-
-
-def get_user_service() -> UserService:  # pragma: no cover
+def get_user_service() -> IUserService:  # pragma: no cover
     """Dependency — overridden in main.py via app.dependency_overrides."""
     raise NotImplementedError("UserService not wired")
 
@@ -80,7 +72,7 @@ async def list_users(
     status_filter: str | None = None,
     role: str | None = None,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -104,7 +96,7 @@ async def list_users(
 @router.get("/me")
 async def get_me(
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -123,7 +115,7 @@ async def get_me(
 async def get_user(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -145,7 +137,7 @@ async def update_profile(
     user_id: UUID,
     body: UpdateProfileRequest,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -169,7 +161,7 @@ async def assign_role(
     user_id: UUID,
     role: UserRole,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -185,7 +177,7 @@ async def remove_role(
     user_id: UUID,
     role: UserRole,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -200,7 +192,7 @@ async def remove_role(
 async def get_user_roles(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -223,7 +215,7 @@ async def get_user_roles(
 async def deactivate_user(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -241,7 +233,7 @@ async def deactivate_user(
 async def suspend_user(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -257,7 +249,7 @@ async def suspend_user(
 async def activate_user(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)
@@ -273,7 +265,7 @@ async def activate_user(
 async def require_password_change(
     user_id: UUID,
     credentials: HTTPAuthorizationCredentials = Security(bearer),  # noqa: B008
-    user_service: UserService = Depends(get_user_service),  # noqa: B008
+    user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     claims = _extract_claims(credentials, token_service)

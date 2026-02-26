@@ -55,12 +55,28 @@ class JWTTokenService(TokenService):
         )
 
     def verify_token(self, token: str) -> dict[str, object]:
+        # Step 1: Pre-check algorithm header BEFORE signature verification
         try:
-            payload: dict[str, object] = jwt.decode(
-                token, self._secret, algorithms=[self._algorithm]
+            header = jwt.get_unverified_header(token)
+        except JWTError as e:
+            raise AuthenticationError(
+                message=f"Invalid token header: {e}",
+                user_message="Invalid or expired token",
+                error_code="INVALID_TOKEN",
+            ) from e
+
+        if header.get("alg") not in ("RS256",):
+            raise AuthenticationError(
+                message=(
+                    f"Rejected token with algorithm '{header.get('alg')}' — only RS256 is allowed"
+                ),
+                user_message="Invalid or expired token",
+                error_code="INVALID_TOKEN",
             )
-            if payload.get("alg") == "none" or self._algorithm == "none":
-                raise ValueError("Algorithm 'none' is not allowed")
+
+        # Step 2: Decode and verify signature
+        try:
+            payload: dict[str, object] = jwt.decode(token, self._secret, algorithms=["RS256"])
         except JWTError as e:
             raise AuthenticationError(
                 message=f"Invalid token: {e}",
@@ -68,7 +84,16 @@ class JWTTokenService(TokenService):
                 error_code="INVALID_TOKEN",
             ) from e
 
-        # Check blacklist if configured
+        # Step 3: Validate required claims
+        for claim in ("sub", "exp", "iat", "iss"):
+            if claim not in payload:
+                raise AuthenticationError(
+                    message=f"Token missing required claim: '{claim}'",
+                    user_message="Invalid or expired token",
+                    error_code="INVALID_TOKEN",
+                )
+
+        # Step 4: Check blacklist if configured
         if self._token_blacklist is not None:
             jti = str(payload.get("jti", ""))
             if jti:
@@ -96,9 +121,16 @@ class JWTTokenService(TokenService):
             return pool.submit(asyncio.run, self._token_blacklist.is_blacklisted(jti)).result()
 
     def _encode(self, payload: dict[str, object], ttl: timedelta) -> str:
-        expire = datetime.now(UTC) + ttl
+        now = datetime.now(UTC)
+        expire = now + ttl
         result: str = jwt.encode(
-            {**payload, "jti": str(uuid4()), "exp": expire},
+            {
+                **payload,
+                "jti": str(uuid4()),
+                "exp": expire,
+                "iat": now,
+                "iss": "ugsys-identity-manager",
+            },
             self._secret,
             algorithm=self._algorithm,
         )

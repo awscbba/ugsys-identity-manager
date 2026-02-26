@@ -4,6 +4,7 @@ import json
 import os
 
 import boto3
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,12 +50,28 @@ class Settings(BaseSettings):
     # DynamoDB — matches CDK stack: ugsys-identity-manager-users-{env}
     dynamodb_table_name: str = ""  # if set, overrides the computed property
     token_blacklist_table_name: str = ""  # if set, overrides the computed property
+    outbox_table_name: str = ""  # if set, overrides the computed property
 
-    # JWT — HS256 default; resolved via _resolve_jwt_secret() above
+    # JWT — RS256 only; resolved via _resolve_jwt_secret() above
     jwt_secret_key: str = _resolve_jwt_secret()
-    jwt_algorithm: str = "HS256"
+    jwt_algorithm: str = "RS256"
     jwt_access_ttl_minutes: int = 30
     jwt_refresh_ttl_days: int = 7
+
+    # JWT RS256 config — populated from env in production
+    jwt_audience: str = ""
+    jwt_issuer: str = ""
+    jwt_public_key: str = ""  # PEM-encoded public key
+    jwt_private_key: str = ""  # PEM-encoded private key
+
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def validate_jwt_algorithm(cls, v: str) -> str:
+        if v != "RS256":
+            raise ValueError(
+                f"jwt_algorithm must be 'RS256', got '{v}'. HS256 and 'none' are not allowed."
+            )
+        return v
 
     # Tracing
     xray_enabled: bool = False  # set to true in prod via XRAY_ENABLED=true
@@ -71,6 +88,12 @@ class Settings(BaseSettings):
         if self.token_blacklist_table_name:
             return self.token_blacklist_table_name
         return f"ugsys-identity-{self.environment}-token-blacklist"
+
+    @property
+    def outbox_table(self) -> str:
+        if self.outbox_table_name:
+            return self.outbox_table_name
+        return f"ugsys-outbox-identity-{self.environment}"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

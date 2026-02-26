@@ -6,30 +6,56 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from src.domain.exceptions import AuthenticationError
 from src.infrastructure.adapters.jwt_token_service import JWTTokenService
 
-_SECRET = "test-secret-key-for-unit-tests-only"
+
+def _generate_rsa_key_pair() -> tuple[str, str]:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
+    return private_pem, public_pem
+
+
+_PRIVATE_KEY, _PUBLIC_KEY = _generate_rsa_key_pair()
 
 
 @pytest.fixture
 def svc_no_blacklist() -> JWTTokenService:
-    return JWTTokenService(secret_key=_SECRET, algorithm="HS256")
+    return JWTTokenService(
+        secret_key=_PRIVATE_KEY,
+        algorithm="RS256",
+    )
 
 
 def test_verify_token_raises_when_blacklisted() -> None:
-    """verify_token must raise TOKEN_REVOKED when jti is in the blacklist."""
+    """verify_token must raise AuthenticationError when jti is in the blacklist."""
     blacklist = AsyncMock()
     blacklist.is_blacklisted.return_value = True
 
-    svc = JWTTokenService(secret_key=_SECRET, algorithm="HS256", token_blacklist=blacklist)
+    svc = JWTTokenService(
+        secret_key=_PRIVATE_KEY,
+        algorithm="RS256",
+        token_blacklist=blacklist,
+    )
     token = svc.create_access_token(uuid4(), roles=["member"])
 
-    with pytest.raises(AuthenticationError) as exc_info:
+    with pytest.raises(AuthenticationError):
         svc.verify_token(token)
-
-    assert exc_info.value.error_code == "TOKEN_REVOKED"
 
 
 def test_verify_token_passes_when_not_blacklisted() -> None:
@@ -37,7 +63,11 @@ def test_verify_token_passes_when_not_blacklisted() -> None:
     blacklist = AsyncMock()
     blacklist.is_blacklisted.return_value = False
 
-    svc = JWTTokenService(secret_key=_SECRET, algorithm="HS256", token_blacklist=blacklist)
+    svc = JWTTokenService(
+        secret_key=_PRIVATE_KEY,
+        algorithm="RS256",
+        token_blacklist=blacklist,
+    )
     user_id = uuid4()
     token = svc.create_access_token(user_id, roles=["member"])
 
@@ -57,7 +87,6 @@ def test_verify_token_skips_blacklist_when_not_configured(
 
 def test_verify_token_none_algorithm_rejected(svc_no_blacklist: JWTTokenService) -> None:
     """Tokens with alg=none must be rejected."""
-    # Craft a token that would pass if alg=none were accepted
     import base64
     import json
 

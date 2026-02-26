@@ -1,8 +1,10 @@
 """Auth application service — orchestrates register + authenticate + refresh use cases."""
 
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from uuid import uuid4
 
 import structlog
 
@@ -14,6 +16,8 @@ from src.application.commands.resend_verification import ResendVerificationComma
 from src.application.commands.reset_password import ForgotPasswordCommand, ResetPasswordCommand
 from src.application.commands.service_token import ServiceTokenCommand, ValidateTokenCommand
 from src.application.commands.verify_email import VerifyEmailCommand
+from src.application.interfaces.auth_service import IAuthService
+from src.domain.entities.outbox_event import OutboxEvent
 from src.domain.entities.user import User, UserStatus
 from src.domain.exceptions import (
     AccountLockedError,
@@ -23,8 +27,10 @@ from src.domain.exceptions import (
     ValidationError,
 )
 from src.domain.repositories.event_publisher import EventPublisher
+from src.domain.repositories.outbox_repository import OutboxRepository
 from src.domain.repositories.token_blacklist_repository import TokenBlacklistRepository
 from src.domain.repositories.token_service import TokenService
+from src.domain.repositories.unit_of_work import UnitOfWork
 from src.domain.repositories.user_repository import UserRepository
 from src.domain.value_objects.password_validator import PasswordValidator
 
@@ -41,7 +47,7 @@ class PasswordHasher(Protocol):
 ServiceAccountsMap = dict[str, dict[str, object]]
 
 
-class AuthService:
+class AuthService(IAuthService):
     def __init__(
         self,
         user_repo: UserRepository,
@@ -51,6 +57,8 @@ class AuthService:
         password_validator: PasswordValidator,
         event_publisher: EventPublisher | None = None,
         service_accounts: ServiceAccountsMap | None = None,
+        outbox_repo: OutboxRepository | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ) -> None:
         self._user_repo = user_repo
         self._token_service = token_service
@@ -59,6 +67,8 @@ class AuthService:
         self._password_validator = password_validator
         self._events = event_publisher
         self._service_accounts: ServiceAccountsMap = service_accounts or {}
+        self._outbox_repo = outbox_repo
+        self._unit_of_work = unit_of_work
 
     async def register(self, command: RegisterUserCommand) -> User:
         logger.info("auth_service.register.started", email=command.email)
@@ -91,24 +101,55 @@ class AuthService:
             status=UserStatus.PENDING_VERIFICATION,
         )
         verification_token = user.generate_verification_token()
-        saved = await self._user_repo.save(user)
+
+        if self._outbox_repo and self._unit_of_work:
+            # Atomic dual-write: user save + outbox event in one transaction
+            expires_at = datetime.now(UTC) + timedelta(hours=24)
+            outbox_event = OutboxEvent(
+                id=str(uuid4()),
+                aggregate_type="User",
+                aggregate_id=str(user.id),
+                event_type="identity.user.registered",
+                payload=json.dumps(
+                    {
+                        "user_id": str(user.id),
+                        "email": user.email,
+                        "full_name": user.full_name,
+                        "verification_token": verification_token,
+                        "expires_at": expires_at.isoformat(),
+                    }
+                ),
+                created_at=datetime.now(UTC).isoformat(),
+                status="pending",
+            )
+            await self._unit_of_work.execute(
+                [
+                    self._user_repo.save_operation(user),
+                    self._outbox_repo.save_operation(outbox_event),
+                ]
+            )
+            saved = user
+        else:
+            # Fallback: direct save + log-and-continue publish
+            saved = await self._user_repo.save(user)
+            if self._events:
+                expires_at = datetime.now(UTC) + timedelta(hours=24)
+                await self._events.publish(
+                    detail_type="identity.user.registered",
+                    payload={
+                        "user_id": str(saved.id),
+                        "email": saved.email,
+                        "full_name": saved.full_name,
+                        "verification_token": verification_token,
+                        "expires_at": expires_at.isoformat(),
+                    },
+                )
+
         logger.info(
             "auth_service.register.completed",
             user_id=str(saved.id),
             duration_ms=round((time.perf_counter() - start) * 1000, 2),
         )
-        if self._events:
-            expires_at = datetime.now(UTC) + timedelta(hours=24)
-            await self._events.publish(
-                detail_type="identity.user.registered",
-                payload={
-                    "user_id": str(saved.id),
-                    "email": saved.email,
-                    "full_name": saved.full_name,
-                    "verification_token": verification_token,
-                    "expires_at": expires_at.isoformat(),
-                },
-            )
         return saved
 
     async def authenticate(self, command: AuthenticateCommand) -> TokenPair:
@@ -313,6 +354,8 @@ class AuthService:
             logger.info("auth_service.forgot_password.not_found")
             return None
         token = self._token_service.create_password_reset_token(user_id=user.id, email=user.email)
+        # Generate an opaque token_id — never store the raw JWT in the outbox/event payload
+        token_id = str(uuid4())
         logger.info(
             "auth_service.forgot_password.token_created",
             user_id=str(user.id),
@@ -324,7 +367,7 @@ class AuthService:
                 payload={
                     "user_id": str(user.id),
                     "email": user.email,
-                    "reset_token": token,
+                    "token_id": token_id,
                 },
             )
         return token
@@ -375,18 +418,37 @@ class AuthService:
         user.require_password_change = False
         user.last_password_change = datetime.now(UTC)
         user.activate()  # auto-activate on successful reset (covers pending_verification)
-        await self._user_repo.update(user)
+
+        if self._outbox_repo and self._unit_of_work:
+            # Atomic dual-write: user update + outbox event in one transaction
+            outbox_event = OutboxEvent(
+                id=str(uuid4()),
+                aggregate_type="User",
+                aggregate_id=str(user.id),
+                event_type="identity.auth.password_changed",
+                payload=json.dumps({"user_id": str(user.id), "email": user.email}),
+                created_at=datetime.now(UTC).isoformat(),
+                status="pending",
+            )
+            await self._unit_of_work.execute(
+                [
+                    self._user_repo.update_operation(user),
+                    self._outbox_repo.save_operation(outbox_event),
+                ]
+            )
+        else:
+            await self._user_repo.update(user)
+            if self._events:
+                await self._events.publish(
+                    detail_type="identity.auth.password_changed",
+                    payload={"user_id": str(user.id), "email": user.email},
+                )
+
         logger.info(
             "auth_service.reset_password.completed",
             user_id=str(user.id),
             duration_ms=round((time.perf_counter() - start) * 1000, 2),
         )
-
-        if self._events:
-            await self._events.publish(
-                detail_type="identity.auth.password_changed",
-                payload={"user_id": str(user.id), "email": user.email},
-            )
 
     def validate_token(self, command: ValidateTokenCommand) -> dict[str, object]:
         """Introspect a token — used by other services for S2S validation.

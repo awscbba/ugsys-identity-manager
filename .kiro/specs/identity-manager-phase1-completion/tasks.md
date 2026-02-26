@@ -411,7 +411,7 @@ Close all P0/P1/P2 gaps in `ugsys-identity-manager` following testability-first 
     - **GET /api/v1/users/{id}**: admin fetches specific user → assert envelope with correct user data
     - _Requirements: 10, 12_
 
-- [ ] 15. Smoke test script against deployed API
+- [x] 15. Smoke test script against deployed API
   - [x] 15.1 Create `scripts/smoke_test.py` inside `ugsys-identity-manager/`
     - Accept `BASE_URL` from environment variable (e.g. `IDENTITY_API_URL=https://<id>.execute-api.us-east-1.amazonaws.com/prod`)
     - Test sequence using `httpx` (sync):

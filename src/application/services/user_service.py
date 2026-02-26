@@ -1,8 +1,9 @@
 """User application service — orchestrates user read/update/admin use cases."""
 
+import json
 import time
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 
@@ -17,24 +18,32 @@ from src.application.commands.update_user import (
     RemoveRoleCommand,
     UpdateProfileCommand,
 )
+from src.application.interfaces.user_service import IUserService
 from src.application.queries.get_user import GetUserQuery
 from src.application.queries.list_users import ListUsersQuery
+from src.domain.entities.outbox_event import OutboxEvent
 from src.domain.entities.user import User, UserRole
 from src.domain.exceptions import AuthorizationError, NotFoundError
 from src.domain.repositories.event_publisher import EventPublisher
+from src.domain.repositories.outbox_repository import OutboxRepository
+from src.domain.repositories.unit_of_work import UnitOfWork
 from src.domain.repositories.user_repository import UserRepository
 
 logger = structlog.get_logger()
 
 
-class UserService:
+class UserService(IUserService):
     def __init__(
         self,
         user_repo: UserRepository,
         event_publisher: EventPublisher | None = None,
+        outbox_repo: OutboxRepository | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ) -> None:
         self._user_repo = user_repo
         self._events = event_publisher
+        self._outbox_repo = outbox_repo
+        self._unit_of_work = unit_of_work
 
     async def _verify_admin(self, admin_id: str) -> User:
         """Look up admin user and verify they have admin or super_admin role."""
@@ -184,12 +193,32 @@ class UserService:
                 user_message="User not found",
             )
         user.deactivate()
-        updated = await self._user_repo.update(user)
-        if self._events:
-            await self._events.publish(
-                detail_type="identity.user.deactivated",
-                payload={"user_id": str(updated.id), "email": updated.email},
+
+        if self._outbox_repo and self._unit_of_work:
+            outbox_event = OutboxEvent(
+                id=str(uuid4()),
+                aggregate_type="User",
+                aggregate_id=str(user.id),
+                event_type="identity.user.deactivated",
+                payload=json.dumps({"user_id": str(user.id), "email": user.email}),
+                created_at=datetime.now(UTC).isoformat(),
+                status="pending",
             )
+            await self._unit_of_work.execute(
+                [
+                    self._user_repo.update_operation(user),
+                    self._outbox_repo.save_operation(outbox_event),
+                ]
+            )
+            updated = user
+        else:
+            updated = await self._user_repo.update(user)
+            if self._events:
+                await self._events.publish(
+                    detail_type="identity.user.deactivated",
+                    payload={"user_id": str(updated.id), "email": updated.email},
+                )
+
         logger.info(
             "user_service.deactivate.completed",
             user_id=str(updated.id),
