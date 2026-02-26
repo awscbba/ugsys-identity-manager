@@ -7,6 +7,16 @@ if [[ "$BRANCH" == "main" ]]; then
   echo -e "${RED}✗ Direct commits to 'main' are not allowed.${NC}"; exit 1
 fi
 FAILED=0
+echo -e "${YELLOW}── Secret scan (Gitleaks) ──${NC}"
+if command -v gitleaks &>/dev/null; then
+  if gitleaks protect --staged --no-banner 2>&1; then
+    echo -e "  ${GREEN}✓ no secrets detected${NC}"
+  else
+    echo -e "  ${RED}✗ gitleaks found secrets — review staged files${NC}"; FAILED=1
+  fi
+else
+  echo -e "  ${YELLOW}⚠ gitleaks not installed — skipping (install: https://github.com/gitleaks/gitleaks)${NC}"
+fi
 echo -e "${YELLOW}── Ruff lint ──${NC}"
 if just lint --quiet 2>&1; then
   echo -e "  ${GREEN}✓ ruff lint${NC}"
