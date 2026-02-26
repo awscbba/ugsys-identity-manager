@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from src.domain.entities.user import User
+from src.domain.repositories.unit_of_work import TransactionalOperation
 
 
 class UserRepository(ABC):
@@ -39,4 +40,14 @@ class UserRepository(ABC):
     @abstractmethod
     async def find_by_verification_token(self, token: str) -> User | None:
         """Find a user by their email verification token."""
+        ...
+
+    @abstractmethod
+    def save_operation(self, user: User) -> TransactionalOperation:
+        """Return a TransactionalOperation for inserting a new user — no I/O."""
+        ...
+
+    @abstractmethod
+    def update_operation(self, user: User) -> TransactionalOperation:
+        """Return a TransactionalOperation for updating an existing user — no I/O."""
         ...

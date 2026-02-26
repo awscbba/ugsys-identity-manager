@@ -1,11 +1,8 @@
 """Auth router — /api/v1/auth endpoints."""
 
-import html
-
 import structlog
 from fastapi import APIRouter, Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, field_validator
 
 from src.application.commands.authenticate_user import AuthenticateCommand
 from src.application.commands.logout import LogoutCommand
@@ -15,7 +12,18 @@ from src.application.commands.resend_verification import ResendVerificationComma
 from src.application.commands.reset_password import ForgotPasswordCommand, ResetPasswordCommand
 from src.application.commands.service_token import ServiceTokenCommand, ValidateTokenCommand
 from src.application.commands.verify_email import VerifyEmailCommand
-from src.application.services.auth_service import AuthService
+from src.application.dtos.auth_dtos import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    ServiceTokenRequest,
+    ValidateTokenRequest,
+    VerifyEmailRequest,
+)
+from src.application.interfaces.auth_service import IAuthService
 from src.presentation.middleware.correlation_id import correlation_id_var
 from src.presentation.response_envelope import success_response
 
@@ -24,71 +32,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 bearer = HTTPBearer()
 
 
-# ── Request models ────────────────────────────────────────────────────────────
-
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: str
-
-    @field_validator("full_name")
-    @classmethod
-    def sanitize_name(cls, v: str) -> str:
-        return html.escape(v.strip())
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-
-class ValidateTokenRequest(BaseModel):
-    token: str
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str
-
-
-class ResendVerificationRequest(BaseModel):
-    email: EmailStr
-
-
-class ServiceTokenRequest(BaseModel):
-    client_id: str
-    client_secret: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"  # noqa: S105
-
-
-class ServiceTokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"  # noqa: S105
-    expires_in: int = 3600
-
-
 # ── Dependency ────────────────────────────────────────────────────────────────
 
 
-def get_auth_service() -> AuthService:  # pragma: no cover
+def get_auth_service() -> IAuthService:  # pragma: no cover
     """Dependency — overridden in main.py via app.dependency_overrides."""
     raise NotImplementedError("AuthService not wired")
 
@@ -99,7 +46,7 @@ def get_auth_service() -> AuthService:  # pragma: no cover
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     user = await service.register(
         RegisterUserCommand(
@@ -116,7 +63,7 @@ async def register(
 @router.post("/login")
 async def login(
     body: LoginRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     tokens = await service.authenticate(
         AuthenticateCommand(email=str(body.email), password=body.password)
@@ -136,7 +83,7 @@ async def login(
 @router.post("/refresh")
 async def refresh(
     body: RefreshRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     tokens = await service.refresh(RefreshTokenCommand(refresh_token=body.refresh_token))
     logger.info("auth.refresh.success")
@@ -154,7 +101,7 @@ async def refresh(
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 async def forgot_password(
     body: ForgotPasswordRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     # Always return 200 — never reveal whether email exists (anti-enumeration)
     await service.forgot_password(ForgotPasswordCommand(email=str(body.email)))
@@ -168,7 +115,7 @@ async def forgot_password(
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 async def reset_password(
     body: ResetPasswordRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     await service.reset_password(
         ResetPasswordCommand(token=body.token, new_password=body.new_password)
@@ -181,7 +128,7 @@ async def reset_password(
 @router.post("/verify-email", status_code=status.HTTP_200_OK)
 async def verify_email(
     body: VerifyEmailRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Verify a user's email address using the verification token."""
     await service.verify_email(VerifyEmailCommand(token=body.token))
@@ -193,7 +140,7 @@ async def verify_email(
 @router.post("/resend-verification", status_code=status.HTTP_200_OK)
 async def resend_verification(
     body: ResendVerificationRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Resend email verification — always returns 200 (anti-enumeration)."""
     await service.resend_verification(ResendVerificationCommand(email=str(body.email)))
@@ -206,7 +153,7 @@ async def resend_verification(
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),  # noqa: B008
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Logout — blacklists the access token."""
     await service.logout(LogoutCommand(access_token=credentials.credentials))
@@ -218,7 +165,7 @@ async def logout(
 @router.post("/validate-token", status_code=status.HTTP_200_OK)
 async def validate_token(
     body: ValidateTokenRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """S2S token introspection — used by other services to validate JWTs."""
     result = service.validate_token(ValidateTokenCommand(token=body.token))
@@ -229,7 +176,7 @@ async def validate_token(
 @router.post("/service-token", status_code=status.HTTP_200_OK)
 async def service_token(
     body: ServiceTokenRequest,
-    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """client_credentials grant — issues a service-to-service access token."""
     tokens = service.issue_service_token(

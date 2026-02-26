@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from src.config import Settings
 
+import aioboto3
 import structlog
 from fastapi import FastAPI
 from mangum import Mangum
@@ -74,17 +75,21 @@ def _wire_dependencies(app: FastAPI) -> None:
     from src.application.services.user_service import UserService
     from src.infrastructure.adapters.jwt_token_service import JWTTokenService
     from src.infrastructure.messaging.event_publisher import EventBridgePublisher
+    from src.infrastructure.persistence.dynamodb_outbox_repository import DynamoDBOutboxRepository
+    from src.infrastructure.persistence.dynamodb_unit_of_work import DynamoDBUnitOfWork
     from src.infrastructure.persistence.dynamodb_user_repository import DynamoDBUserRepository
     from src.presentation.api.v1.auth import get_auth_service
     from src.presentation.api.v1.roles import get_token_service as get_roles_token_service
     from src.presentation.api.v1.users import get_token_service, get_user_service
 
+    session = aioboto3.Session()
+
     user_repo = DynamoDBUserRepository(
         table_name=settings.users_table,
         region=settings.aws_region,
+        session=session,
     )
 
-    # Token blacklist and password validator — wired for AuthService lockout/gates
     from src.domain.value_objects.password_validator import PasswordValidator
     from src.infrastructure.persistence.dynamodb_token_blacklist import (
         DynamoDBTokenBlacklistRepository,
@@ -95,6 +100,7 @@ def _wire_dependencies(app: FastAPI) -> None:
     token_blacklist = DynamoDBTokenBlacklistRepository(
         table_name=settings.token_blacklist_table,
         region=settings.aws_region,
+        session=session,
     )
 
     token_service = JWTTokenService(
@@ -105,7 +111,15 @@ def _wire_dependencies(app: FastAPI) -> None:
     event_publisher = EventBridgePublisher(
         bus_name=settings.event_bus_name,
         region=settings.aws_region,
+        session=session,
     )
+
+    outbox_repo = DynamoDBOutboxRepository(
+        table_name=settings.outbox_table,
+        region=settings.aws_region,
+        session=session,
+    )
+    unit_of_work = DynamoDBUnitOfWork(region=settings.aws_region, session=session)
 
     class _BcryptHasher:
         def hash(self, password: str) -> str:
@@ -124,6 +138,8 @@ def _wire_dependencies(app: FastAPI) -> None:
         password_validator=password_validator,
         event_publisher=event_publisher,
         service_accounts=_load_service_accounts(settings),
+        outbox_repo=outbox_repo,
+        unit_of_work=unit_of_work,
     )
     user_service = UserService(user_repo=user_repo, event_publisher=event_publisher)
 
@@ -133,35 +149,42 @@ def _wire_dependencies(app: FastAPI) -> None:
     app.dependency_overrides[get_roles_token_service] = lambda: token_service
 
 
-app = FastAPI(
-    title="ugsys Identity Manager",
-    version="0.1.0",
-    docs_url="/docs" if settings.environment != "prod" else None,
-    redoc_url=None,
-    lifespan=lifespan,
-)
+def create_app() -> FastAPI:
+    """Application factory — single place for all wiring."""
+    app = FastAPI(
+        title="ugsys Identity Manager",
+        version="0.1.0",
+        docs_url="/docs" if settings.environment != "prod" else None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
 
-# Middleware — order matters: outermost first
-app.add_middleware(RequestLoggingMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware)
-if settings.xray_enabled:
-    app.add_middleware(TracingMiddleware, service_name=settings.service_name)
-app.add_middleware(CorrelationIdMiddleware)
+    # Middleware — order matters: outermost first
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RateLimitMiddleware)
+    if settings.xray_enabled:
+        app.add_middleware(TracingMiddleware, service_name=settings.service_name)
+    app.add_middleware(CorrelationIdMiddleware)
 
-# Exception handlers — registered before routers
-ExcHandler = Callable[[StarletteRequest, Exception], Awaitable[StarletteResponse]]
-app.add_exception_handler(
-    DomainError,
-    cast(ExcHandler, domain_exception_handler),
-)
-app.add_exception_handler(Exception, unhandled_exception_handler)
+    # Exception handlers — registered before routers
+    ExcHandler = Callable[[StarletteRequest, Exception], Awaitable[StarletteResponse]]
+    app.add_exception_handler(
+        DomainError,
+        cast(ExcHandler, domain_exception_handler),
+    )
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
-# Routers
-app.include_router(health.router)
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(roles.router, prefix="/api/v1")
+    # Routers
+    app.include_router(health.router)
+    app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(users.router, prefix="/api/v1")
+    app.include_router(roles.router, prefix="/api/v1")
+
+    return app
+
+
+app = create_app()
 
 # Lambda handler
 handler = Mangum(app, lifespan="on")
