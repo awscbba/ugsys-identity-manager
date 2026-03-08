@@ -3,13 +3,10 @@ name: Deploy
 on:
   push:
     branches: [main]
-    paths:
-      - "src/**"
-      - "Dockerfile.lambda"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/deploy.yml"
-    paths-ignore: [".kiro/**"]
+    paths-ignore:
+      - "*.md"
+      - ".gitignore"
+      - ".kiro/**"
   workflow_dispatch:
 
 env:
