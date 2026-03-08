@@ -1,0 +1,21 @@
+FROM public.ecr.aws/lambda/python:3.13
+
+# Install uv for fast dependency installation
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# Copy dependency manifests first for layer caching
+COPY pyproject.toml uv.lock ./
+
+# Export locked dependencies to requirements.txt, then install into the
+# Lambda task root — this is always on sys.path regardless of which Python
+# interpreter the runtime uses.
+RUN uv export --no-dev --no-hashes --format requirements-txt -o /tmp/requirements.txt \
+    && pip install -r /tmp/requirements.txt --target "${LAMBDA_TASK_ROOT}" --quiet
+
+# Copy application source
+COPY src/ ./src/
+
+# Lambda handler: src.main.handler (Mangum wraps FastAPI)
+CMD ["src.main.handler"]
