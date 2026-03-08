@@ -3,19 +3,24 @@ name: Deploy
 on:
   push:
     branches: [main]
-    paths-ignore: ["*.md", ".gitignore", ".kiro/**"]
+    paths-ignore:
+      - "*.md"
+      - ".gitignore"
+      - ".kiro/**"
+  workflow_dispatch:
 
 env:
-  PYTHON_VERSION: "3.13"
   AWS_REGION: us-east-1
+  ECR_REPOSITORY: ugsys-identity-manager
+  LAMBDA_FUNCTION: ugsys-identity-manager-prod
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
-    name: Deploy to Lambda (prod)
+  build-and-deploy:
+    name: Build & Deploy Lambda (container image)
     runs-on: ubuntu-latest
     environment: prod
     steps:
@@ -27,43 +32,32 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - uses: astral-sh/setup-uv@v4
-      - run: uv python install ${{ env.PYTHON_VERSION }}
-      - run: uv sync
-
-      - name: Build Lambda package
+      - name: Build, tag, and push image
+        id: push
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Always start from a clean dist/ to prevent stale packages accumulating
-          rm -rf dist/
-          uv export --no-dev --no-hashes -o requirements.txt
-          pip install \
-            -r requirements.txt \
-            -t dist/ \
-            --quiet \
-            --python-version 3.13 \
-            --platform manylinux2014_x86_64 \
-            --implementation cp \
-            --abi cp313 \
-            --only-binary :all:
-          # Explicitly remove passlib — it is not a direct dependency but can
-          # appear as a transitive artifact from older bcrypt wheels. Its
-          # detect_wrap_bug() runs at import time and crashes with a ValueError
-          # when passwords exceed 72 bytes, breaking all Lambda invocations.
-          find dist/ -name "passlib*" -exec rm -rf {} + 2>/dev/null || true
-          cp -r src dist/
-          cp src/main.py dist/handler.py
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -f Dockerfile.lambda -t "$IMAGE_URI" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$IMAGE_URI"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy via AWS CLI (Lambda update)
+      - name: Update Lambda function image
         run: |
-          cd dist && zip -r ../function.zip . -q
           aws lambda update-function-code \
-            --function-name ugsys-identity-manager-prod \
-            --zip-file fileb://../function.zip \
-            --region ${{ env.AWS_REGION }}
+            --function-name "${{ env.LAMBDA_FUNCTION }}" \
+            --image-uri "${{ steps.push.outputs.image_uri }}" \
+            --region "${{ env.AWS_REGION }}"
+
+          aws lambda wait function-updated \
+            --function-name "${{ env.LAMBDA_FUNCTION }}" \
+            --region "${{ env.AWS_REGION }}"
 
       - name: Notify success
         if: success()
@@ -87,13 +81,6 @@ jobs:
                   "fields": [
                     {"type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`"},
                     {"type": "mrkdwn", "text": "*By:*\n${{ github.actor }}"}
-                  ]
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "View Run"},
-                     "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
                   ]
                 }
               ]
