@@ -127,6 +127,19 @@ class Settings(BaseSettings):
             )
         return v
 
+    # CORS — comma-separated list of allowed origins.
+    # Covers all ugsys frontends that call the identity-manager directly.
+    # Override via ALLOWED_ORIGINS env var if new frontends are added.
+    allowed_origins: str = (
+        "https://registry.apps.cloud.org.bo,"
+        "https://admin.apps.cloud.org.bo,"
+        "https://cbba.cloud.org.bo"
+    )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
     # Tracing
     xray_enabled: bool = False  # set to true in prod via XRAY_ENABLED=true
 
