@@ -17,8 +17,8 @@ def _resolve_environment() -> str:
 @dataclass
 class RsaKeyPair:
     private_key: str  # PEM — used to sign tokens
-    public_key: str   # PEM — used to verify tokens, served via JWKS
-    key_id: str       # kid — included in JWT header and JWKS
+    public_key: str  # PEM — used to verify tokens, served via JWKS
+    key_id: str  # kid — included in JWT header and JWKS
 
 
 def _resolve_rsa_keys() -> RsaKeyPair:
@@ -63,10 +63,14 @@ def _resolve_rsa_keys() -> RsaKeyPair:
             serialization.PrivateFormat.TraditionalOpenSSL,
             serialization.NoEncryption(),
         ).decode()
-        public_key = _priv.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_key = (
+            _priv.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         return RsaKeyPair(private_key=private_key, public_key=public_key, key_id="dev-ephemeral")
     except ImportError as err:
         raise RuntimeError(

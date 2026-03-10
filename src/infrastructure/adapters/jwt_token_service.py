@@ -85,9 +85,7 @@ class JWTTokenService(TokenService):
 
         # Step 2: Decode and verify signature using the public key
         try:
-            payload: dict[str, object] = jwt.decode(
-                token, self._public_key, algorithms=["RS256"]
-            )
+            payload: dict[str, object] = jwt.decode(token, self._public_key, algorithms=["RS256"])
         except JWTError as e:
             raise AuthenticationError(
                 message=f"Invalid token: {e}",
