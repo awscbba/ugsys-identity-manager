@@ -46,7 +46,7 @@ def svc() -> JWTTokenService:
 
 def test_create_and_verify_access_token(svc: JWTTokenService) -> None:
     user_id = uuid4()
-    token = svc.create_access_token(user_id=user_id, roles=["member"])
+    token = svc.create_access_token(user_id=user_id, email="user@example.com", roles=["member"])
     payload = svc.verify_token(token)
     assert payload["sub"] == str(user_id)
     assert payload["type"] == "access"
@@ -67,7 +67,7 @@ def test_invalid_token_raises(svc: JWTTokenService) -> None:
 
 
 def test_tampered_token_raises(svc: JWTTokenService) -> None:
-    token = svc.create_access_token(uuid4(), roles=["member"])
+    token = svc.create_access_token(uuid4(), email="user@example.com", roles=["member"])
     tampered = token[:-5] + "XXXXX"
     with pytest.raises(AuthenticationError):
         svc.verify_token(tampered)
@@ -76,7 +76,7 @@ def test_tampered_token_raises(svc: JWTTokenService) -> None:
 def test_all_tokens_contain_jti_claim(svc: JWTTokenService) -> None:
     """Every token type must include a jti (UUID4) claim."""
     user_id = uuid4()
-    access = svc.verify_token(svc.create_access_token(user_id, ["member"]))
+    access = svc.verify_token(svc.create_access_token(user_id, "user@example.com", ["member"]))
     refresh = svc.verify_token(svc.create_refresh_token(user_id))
     reset = svc.verify_token(svc.create_password_reset_token(user_id, "a@b.com"))
     service = svc.verify_token(svc.create_service_token("client-1", ["admin"]))
@@ -90,6 +90,6 @@ def test_all_tokens_contain_jti_claim(svc: JWTTokenService) -> None:
 def test_consecutive_tokens_have_different_jti(svc: JWTTokenService) -> None:
     """Two tokens created back-to-back must have unique jti values."""
     user_id = uuid4()
-    t1 = svc.verify_token(svc.create_access_token(user_id, ["member"]))
-    t2 = svc.verify_token(svc.create_access_token(user_id, ["member"]))
+    t1 = svc.verify_token(svc.create_access_token(user_id, "user@example.com", ["member"]))
+    t2 = svc.verify_token(svc.create_access_token(user_id, "user@example.com", ["member"]))
     assert t1["jti"] != t2["jti"]

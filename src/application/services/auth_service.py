@@ -284,6 +284,7 @@ class AuthService(IAuthService):
         # 8. Create tokens and return
         access_token = self._token_service.create_access_token(
             user_id=user.id,
+            email=user.email,
             roles=[r.value for r in user.roles],
         )
         refresh_token = self._token_service.create_refresh_token(user_id=user.id)
@@ -331,6 +332,7 @@ class AuthService(IAuthService):
 
         access_token = self._token_service.create_access_token(
             user_id=user.id,
+            email=user.email,
             roles=[r.value for r in user.roles],
         )
         new_refresh = self._token_service.create_refresh_token(user_id=user.id)
