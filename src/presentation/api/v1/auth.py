@@ -74,6 +74,7 @@ async def login(
         "access_token": tokens.access_token,
         "refresh_token": tokens.refresh_token,
         "token_type": "bearer",
+        "expires_in": 1800,  # 30 minutes in seconds — matches jwt_access_ttl_minutes
     }
     if hasattr(tokens, "require_password_change") and tokens.require_password_change:
         data["require_password_change"] = True

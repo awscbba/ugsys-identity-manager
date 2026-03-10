@@ -108,6 +108,7 @@ def _wire_dependencies(app: FastAPI) -> None:
         public_key=settings.jwt_public_key,
         key_id=settings.jwt_key_id,
         token_blacklist=token_blacklist,
+        audience=settings.jwt_audience,
     )
     event_publisher = EventBridgePublisher(
         bus_name=settings.event_bus_name,

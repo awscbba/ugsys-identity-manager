@@ -51,6 +51,7 @@ def test_create_and_verify_access_token(svc: JWTTokenService) -> None:
     assert payload["sub"] == str(user_id)
     assert payload["type"] == "access"
     assert payload["roles"] == ["member"]
+    assert payload["aud"] == "admin-panel"  # aud claim must be present on access tokens
 
 
 def test_create_and_verify_refresh_token(svc: JWTTokenService) -> None:
