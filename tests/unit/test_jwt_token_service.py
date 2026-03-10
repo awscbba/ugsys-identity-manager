@@ -36,10 +36,11 @@ _PRIVATE_KEY, _PUBLIC_KEY = _generate_rsa_key_pair()
 
 @pytest.fixture
 def svc() -> JWTTokenService:
-    """RS256 service using a generated test RSA private key."""
+    """RS256 service using a generated test RSA key pair."""
     return JWTTokenService(
-        secret_key=_PRIVATE_KEY,
-        algorithm="RS256",
+        private_key=_PRIVATE_KEY,
+        public_key=_PUBLIC_KEY,
+        key_id="test-key",
     )
 
 

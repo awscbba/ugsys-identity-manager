@@ -37,8 +37,9 @@ _PRIVATE_KEY, _PUBLIC_KEY = _generate_rsa_key_pair()
 @pytest.fixture
 def svc_no_blacklist() -> JWTTokenService:
     return JWTTokenService(
-        secret_key=_PRIVATE_KEY,
-        algorithm="RS256",
+        private_key=_PRIVATE_KEY,
+        public_key=_PUBLIC_KEY,
+        key_id="test-key",
     )
 
 
@@ -48,8 +49,9 @@ def test_verify_token_raises_when_blacklisted() -> None:
     blacklist.is_blacklisted.return_value = True
 
     svc = JWTTokenService(
-        secret_key=_PRIVATE_KEY,
-        algorithm="RS256",
+        private_key=_PRIVATE_KEY,
+        public_key=_PUBLIC_KEY,
+        key_id="test-key",
         token_blacklist=blacklist,
     )
     token = svc.create_access_token(uuid4(), roles=["member"])
@@ -64,8 +66,9 @@ def test_verify_token_passes_when_not_blacklisted() -> None:
     blacklist.is_blacklisted.return_value = False
 
     svc = JWTTokenService(
-        secret_key=_PRIVATE_KEY,
-        algorithm="RS256",
+        private_key=_PRIVATE_KEY,
+        public_key=_PUBLIC_KEY,
+        key_id="test-key",
         token_blacklist=blacklist,
     )
     user_id = uuid4()

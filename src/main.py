@@ -19,7 +19,7 @@ from starlette.responses import Response as StarletteResponse
 from src.config import settings
 from src.domain.exceptions import DomainError
 from src.infrastructure.logging import configure_logging
-from src.presentation.api.v1 import auth, health, roles, users
+from src.presentation.api.v1 import auth, health, jwks, roles, users
 from src.presentation.middleware.correlation_id import CorrelationIdMiddleware
 from src.presentation.middleware.exception_handler import (
     domain_exception_handler,
@@ -104,8 +104,9 @@ def _wire_dependencies(app: FastAPI) -> None:
     )
 
     token_service = JWTTokenService(
-        secret_key=settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
+        private_key=settings.jwt_private_key,
+        public_key=settings.jwt_public_key,
+        key_id=settings.jwt_key_id,
         token_blacklist=token_blacklist,
     )
     event_publisher = EventBridgePublisher(
@@ -177,6 +178,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health.router)
+    app.include_router(jwks.router)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(roles.router, prefix="/api/v1")

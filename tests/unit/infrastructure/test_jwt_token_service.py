@@ -8,7 +8,6 @@ DO NOT fix the tests or the code when they fail.
 
 from __future__ import annotations
 
-import contextlib
 import time
 from uuid import uuid4
 
@@ -29,13 +28,21 @@ _PRIVATE_KEY_PEM = _PRIVATE_KEY.private_bytes(
     format=serialization.PrivateFormat.TraditionalOpenSSL,
     encryption_algorithm=serialization.NoEncryption(),
 ).decode()
+_PUBLIC_KEY_PEM = (
+    _PRIVATE_KEY.public_key()
+    .public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    .decode()
+)
 
 _HS256_ALGORITHM_TEST_VALUE = "test-hs256-secret-for-exploration-tests"
 
 
 def _rs256_service() -> JWTTokenService:
     """Service configured for RS256 (correct config)."""
-    return JWTTokenService(secret_key=_PRIVATE_KEY_PEM, algorithm="RS256")
+    return JWTTokenService(private_key=_PRIVATE_KEY_PEM, public_key=_PUBLIC_KEY_PEM, key_id="test")
 
 
 # ── Bug 1.14: jwt_algorithm defaults to HS256 ────────────────────────────────
@@ -79,18 +86,18 @@ def test_verify_token_pre_checks_algorithm_header() -> None:
 
 
 def test_hs256_token_accepted_by_default_config_service() -> None:
-    """Requirement 2.17/2.18: A service built from default settings accepts HS256 tokens.
+    """Requirement 2.17/2.18: settings.jwt_algorithm must be RS256 and HS256 tokens rejected.
 
-    BUG: settings.jwt_algorithm defaults to 'HS256', so a service wired from
-    settings will accept HS256-signed tokens. After the fix, the config validator
-    must reject HS256 at startup.
-
-    This test creates a service using the CURRENT DEFAULT algorithm from settings
-    and verifies it accepts an HS256 token — proving the bug exists.
-    Counterexample: HS256 token accepted by a service built from default settings.
+    With the fix applied: settings.jwt_algorithm == "RS256", so a service built from
+    settings rejects HS256-signed tokens.
     """
-    # Build service using the current (buggy) default algorithm from settings
-    svc = JWTTokenService(secret_key=_HS256_ALGORITHM_TEST_VALUE, algorithm=settings.jwt_algorithm)
+    assert settings.jwt_algorithm == "RS256"
+
+    svc = JWTTokenService(
+        private_key=_PRIVATE_KEY_PEM,
+        public_key=_PUBLIC_KEY_PEM,
+        key_id="test",
+    )
 
     hs256_token: str = jwt.encode(
         {"sub": str(uuid4()), "exp": int(time.time()) + 3600, "iss": "test"},
@@ -98,21 +105,9 @@ def test_hs256_token_accepted_by_default_config_service() -> None:
         algorithm="HS256",
     )
 
-    # On unfixed code: settings.jwt_algorithm == "HS256", so verify_token succeeds (bug)
-    # On fixed code: settings.jwt_algorithm == "RS256", so this raises AuthenticationError
-    if settings.jwt_algorithm == "HS256":
-        # Bug confirmed: HS256 token accepted because config defaults to HS256
-        with contextlib.suppress(AuthenticationError):
-            svc.verify_token(hs256_token)
-        pytest.fail(
-            f"BUG CONFIRMED: settings.jwt_algorithm='{settings.jwt_algorithm}' — "
-            "config defaults to HS256 instead of RS256. "
-            "After fix, this must raise AuthenticationError."
-        )
-    else:
-        # Fix applied: RS256 enforced, HS256 token rejected
-        with pytest.raises(AuthenticationError):
-            svc.verify_token(hs256_token)
+    # RS256 service must reject HS256 token
+    with pytest.raises(AuthenticationError):
+        svc.verify_token(hs256_token)
 
 
 # ── Bug 1.16: Token missing 'iss' claim accepted ─────────────────────────────
@@ -175,22 +170,12 @@ def test_token_missing_sub_claim_rejected() -> None:
 
 
 def test_preservation_valid_rs256_token_with_all_required_claims_is_accepted() -> None:
-    """Preservation 3.2: A valid RS256 token with all required claims must be accepted.
-
-    This confirms the baseline: verify_token() returns the payload for a well-formed
-    RS256 token containing sub, exp, iat, and iss. This must continue to work after
-    the fix is applied.
-    """
-    # Use public key PEM for verification (correct RS256 usage)
-    public_key_pem = (
-        _PRIVATE_KEY.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode()
+    """Preservation 3.2: A valid RS256 token with all required claims must be accepted."""
+    svc = JWTTokenService(
+        private_key=_PRIVATE_KEY_PEM,
+        public_key=_PUBLIC_KEY_PEM,
+        key_id="test",
     )
-    svc = JWTTokenService(secret_key=public_key_pem, algorithm="RS256")
 
     now = int(time.time())
     token: str = jwt.encode(
