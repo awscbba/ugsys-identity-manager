@@ -40,9 +40,9 @@ class JWTTokenService(TokenService):
 
     # ── Token creation ────────────────────────────────────────────────────────
 
-    def create_access_token(self, user_id: UUID, roles: list[str]) -> str:
+    def create_access_token(self, user_id: UUID, email: str, roles: list[str]) -> str:
         return self._encode(
-            {"sub": str(user_id), "roles": roles, "type": "access"},
+            {"sub": str(user_id), "email": email, "roles": roles, "type": "access"},
             self._access_ttl,
         )
 
