@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     jwt_access_ttl_minutes: int = 30
     jwt_refresh_ttl_days: int = 7
+    # Audience embedded in access tokens — consumers must validate this claim
+    jwt_audience: str = "admin-panel"
 
     # Resolved key pair — read-only properties backed by module-level _rsa_keys
     @property

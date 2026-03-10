@@ -28,11 +28,13 @@ class JWTTokenService(TokenService):
         public_key: str,
         key_id: str = "ugsys-v1",
         token_blacklist: TokenBlacklistRepository | None = None,
+        audience: str = "admin-panel",
     ) -> None:
         self._private_key = private_key
         self._public_key = public_key
         self._key_id = key_id
         self._token_blacklist = token_blacklist
+        self._audience = audience
         self._access_ttl = timedelta(minutes=30)
         self._refresh_ttl = timedelta(days=7)
         self._reset_ttl = timedelta(hours=1)
@@ -42,7 +44,13 @@ class JWTTokenService(TokenService):
 
     def create_access_token(self, user_id: UUID, email: str, roles: list[str]) -> str:
         return self._encode(
-            {"sub": str(user_id), "email": email, "roles": roles, "type": "access"},
+            {
+                "sub": str(user_id),
+                "email": email,
+                "roles": roles,
+                "type": "access",
+                "aud": self._audience,
+            },
             self._access_ttl,
         )
 
@@ -84,8 +92,13 @@ class JWTTokenService(TokenService):
             )
 
         # Step 2: Decode and verify signature using the public key
+        # Pass audience so jose enforces aud validation on access tokens.
+        # For token types without aud (refresh, reset, service), jose skips
+        # audience validation when the claim is absent — safe for all types.
         try:
-            payload: dict[str, object] = jwt.decode(token, self._public_key, algorithms=["RS256"])
+            payload: dict[str, object] = jwt.decode(
+                token, self._public_key, algorithms=["RS256"], audience=self._audience
+            )
         except JWTError as e:
             raise AuthenticationError(
                 message=f"Invalid token: {e}",
