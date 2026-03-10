@@ -132,8 +132,7 @@ class Settings(BaseSettings):
     # Override via ALLOWED_ORIGINS env var if new frontends are added.
     allowed_origins: str = (
         "https://registry.apps.cloud.org.bo,"
-        "https://admin.apps.cloud.org.bo,"
-        "https://cbba.cloud.org.bo"
+        "https://admin.apps.cloud.org.bo"
     )
 
     @property

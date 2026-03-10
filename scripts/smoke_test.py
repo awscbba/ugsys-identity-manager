@@ -39,12 +39,12 @@ if not BASE_URL:
 
 # Unique test user per run — avoids conflicts on repeated runs
 RUN_ID = str(uuid.uuid4())[:8]
-TEST_EMAIL = f"smoke+{RUN_ID}@test.cbba.cloud.org.bo"
+TEST_EMAIL = f"smoke+{RUN_ID}@test.apps.cloud.org.bo"
 TEST_PASSWORD = "Smoke@Test1!"
 TEST_NAME = "Smoke Test User"
 
 # Second user for account lockout test — isolated from main flow
-LOCKOUT_EMAIL = f"lockout+{RUN_ID}@test.cbba.cloud.org.bo"
+LOCKOUT_EMAIL = f"lockout+{RUN_ID}@test.apps.cloud.org.bo"
 LOCKOUT_PASSWORD = "Lockout@Test1!"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ step("duplicate email → 409", r.status_code == 409, f"HTTP {r.status_code}")
 print("\n13. Weak password")
 r = client.post(
     "/api/v1/auth/register",
-    json={"email": f"weak+{RUN_ID}@test.cbba.cloud.org.bo", "password": "weak", "full_name": "Test"},
+    json={"email": f"weak+{RUN_ID}@test.apps.cloud.org.bo", "password": "weak", "full_name": "Test"},
 )
 step("weak password → 422", r.status_code == 422, f"HTTP {r.status_code}")
 
