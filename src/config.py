@@ -130,10 +130,7 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins.
     # Covers all ugsys frontends that call the identity-manager directly.
     # Override via ALLOWED_ORIGINS env var if new frontends are added.
-    allowed_origins: str = (
-        "https://registry.apps.cloud.org.bo,"
-        "https://admin.apps.cloud.org.bo"
-    )
+    allowed_origins: str = "https://registry.apps.cloud.org.bo,https://admin.apps.cloud.org.bo"
 
     @property
     def cors_origins(self) -> list[str]:
