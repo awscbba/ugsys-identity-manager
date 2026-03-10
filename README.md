@@ -30,5 +30,5 @@ The script covers the full register → verify-email → login → logout flow. 
 email verification token directly from DynamoDB since email delivery (omnichannel service)
 is not yet built.
 
-Each run creates a unique test user (`smoke+<run-id>@test.cbba.cloud.org.bo`) so it is
+Each run creates a unique test user (`smoke+<run-id>@test.apps.cloud.org.bo`) so it is
 safe to run repeatedly without cleanup.
