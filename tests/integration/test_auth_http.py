@@ -216,15 +216,16 @@ async def test_reset_password_with_valid_token(app_client: httpx.AsyncClient) ->
     from src.infrastructure.persistence.dynamodb_user_repository import (
         DynamoDBUserRepository as Repo,
     )
-    from tests.integration.conftest import _JWT_PRIVATE_KEY_PEM
+    from tests.integration.conftest import _JWT_PRIVATE_KEY_PEM, _JWT_PUBLIC_KEY_PEM
 
     repo = Repo(table_name=_USERS_TABLE, region="us-east-1")
     user = await repo.find_by_email(email)
     assert user is not None
 
     jwt_svc = JWTTokenService(
-        secret_key=_JWT_PRIVATE_KEY_PEM,
-        algorithm="RS256",
+        private_key=_JWT_PRIVATE_KEY_PEM,
+        public_key=_JWT_PUBLIC_KEY_PEM,
+        key_id="test-key",
     )
     reset_token = jwt_svc.create_password_reset_token(user_id=user.id, email=email)
 

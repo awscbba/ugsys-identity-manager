@@ -48,7 +48,6 @@ from src.infrastructure.persistence.dynamodb_user_repository import (  # noqa: E
 _USERS_TABLE = "ugsys-identity-manager-users-test"
 _BLACKLIST_TABLE = "ugsys-identity-test-token-blacklist"
 _EVENT_BUS = "ugsys-platform-events-test"
-_JWT_ALGORITHM = "RS256"
 
 # ── Test RSA key pair (generated once at module load, reused across all tests) ─
 _TEST_RSA_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -65,10 +64,6 @@ _JWT_PUBLIC_KEY_PEM = (
     )
     .decode()
 )
-# JWTTokenService uses `secret_key` for both sign (private) and verify (public).
-# For RS256, jose uses the private key to sign and the public key to verify.
-# We pass the private key as `secret_key` so the service can both sign and verify.
-_JWT_SECRET = _JWT_PRIVATE_KEY_PEM
 
 
 def _create_tables(region: str = "us-east-1") -> None:
@@ -241,8 +236,9 @@ async def app_client(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[httpx.As
             table_name=_BLACKLIST_TABLE, region="us-east-1", session=session
         )
         token_service = JWTTokenService(
-            secret_key=_JWT_SECRET,
-            algorithm=_JWT_ALGORITHM,
+            private_key=_JWT_PRIVATE_KEY_PEM,
+            public_key=_JWT_PUBLIC_KEY_PEM,
+            key_id="test-key",
             token_blacklist=blacklist_repo,
         )
         event_publisher = EventBridgePublisher(
