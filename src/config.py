@@ -189,7 +189,16 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins.
     # Covers all ugsys frontends that call the identity-manager directly.
     # Override via ALLOWED_ORIGINS env var if new frontends are added.
-    allowed_origins: str = "https://registry.apps.cloud.org.bo,https://admin.apps.cloud.org.bo"
+    allowed_origins: str = (
+        "https://registry.apps.cloud.org.bo,"
+        "https://profile.apps.cloud.org.bo,"
+        "https://admin.apps.cloud.org.bo"
+    )
+
+    # Cookie configuration — environment-configurable, never hardcoded
+    cookie_domain: str = ".apps.cloud.org.bo"
+    cookie_secure: bool = True
+    refresh_token_cookie_name: str = "ugsys_refresh_token"  # noqa: S105 — cookie name, not a secret
 
     @property
     def cors_origins(self) -> list[str]:

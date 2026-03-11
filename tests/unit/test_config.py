@@ -31,3 +31,20 @@ def test_token_blacklist_table_property() -> None:
 def test_token_blacklist_table_override() -> None:
     s = Settings(token_blacklist_table_name="custom-blacklist", environment="staging")
     assert s.token_blacklist_table == "custom-blacklist"
+
+
+def test_cookie_settings_defaults() -> None:
+    s = Settings()
+    assert s.cookie_domain == ".apps.cloud.org.bo"
+    assert s.cookie_secure is True
+    assert s.refresh_token_cookie_name == "ugsys_refresh_token"
+    assert "https://profile.apps.cloud.org.bo" in s.cors_origins
+
+
+def test_cookie_secure_overridable_via_env(monkeypatch: object) -> None:
+    import pytest
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setenv("COOKIE_SECURE", "false")
+        s = Settings()
+        assert s.cookie_secure is False
