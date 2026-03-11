@@ -43,7 +43,8 @@ def svc_no_blacklist() -> JWTTokenService:
     )
 
 
-def test_verify_token_raises_when_blacklisted() -> None:
+@pytest.mark.asyncio
+async def test_verify_token_raises_when_blacklisted() -> None:
     """verify_token must raise AuthenticationError when jti is in the blacklist."""
     blacklist = AsyncMock()
     blacklist.is_blacklisted.return_value = True
@@ -57,10 +58,11 @@ def test_verify_token_raises_when_blacklisted() -> None:
     token = svc.create_access_token(uuid4(), email="user@example.com", roles=["member"])
 
     with pytest.raises(AuthenticationError):
-        svc.verify_token(token)
+        await svc.verify_token(token)
 
 
-def test_verify_token_passes_when_not_blacklisted() -> None:
+@pytest.mark.asyncio
+async def test_verify_token_passes_when_not_blacklisted() -> None:
     """verify_token must succeed when jti is NOT in the blacklist."""
     blacklist = AsyncMock()
     blacklist.is_blacklisted.return_value = False
@@ -74,11 +76,12 @@ def test_verify_token_passes_when_not_blacklisted() -> None:
     user_id = uuid4()
     token = svc.create_access_token(user_id, email="user@example.com", roles=["member"])
 
-    payload = svc.verify_token(token)
+    payload = await svc.verify_token(token)
     assert payload["sub"] == str(user_id)
 
 
-def test_verify_token_skips_blacklist_when_not_configured(
+@pytest.mark.asyncio
+async def test_verify_token_skips_blacklist_when_not_configured(
     svc_no_blacklist: JWTTokenService,
 ) -> None:
     """When no blacklist is configured, verify_token must not attempt any blacklist check."""
@@ -86,11 +89,12 @@ def test_verify_token_skips_blacklist_when_not_configured(
     token = svc_no_blacklist.create_access_token(
         user_id, email="user@example.com", roles=["member"]
     )
-    payload = svc_no_blacklist.verify_token(token)
+    payload = await svc_no_blacklist.verify_token(token)
     assert payload["sub"] == str(user_id)
 
 
-def test_verify_token_none_algorithm_rejected(svc_no_blacklist: JWTTokenService) -> None:
+@pytest.mark.asyncio
+async def test_verify_token_none_algorithm_rejected(svc_no_blacklist: JWTTokenService) -> None:
     """Tokens with alg=none must be rejected."""
     import base64
     import json
@@ -104,20 +108,22 @@ def test_verify_token_none_algorithm_rejected(svc_no_blacklist: JWTTokenService)
     forged = f"{header.decode()}.{payload_b.decode()}."
 
     with pytest.raises(AuthenticationError):
-        svc_no_blacklist.verify_token(forged)
+        await svc_no_blacklist.verify_token(forged)
 
 
-def test_password_reset_token_has_email_claim(svc_no_blacklist: JWTTokenService) -> None:
+@pytest.mark.asyncio
+async def test_password_reset_token_has_email_claim(svc_no_blacklist: JWTTokenService) -> None:
     user_id = uuid4()
     token = svc_no_blacklist.create_password_reset_token(user_id, "user@example.com")
-    payload = svc_no_blacklist.verify_token(token)
+    payload = await svc_no_blacklist.verify_token(token)
     assert payload["email"] == "user@example.com"
     assert payload["type"] == "password_reset"
 
 
-def test_service_token_has_correct_claims(svc_no_blacklist: JWTTokenService) -> None:
+@pytest.mark.asyncio
+async def test_service_token_has_correct_claims(svc_no_blacklist: JWTTokenService) -> None:
     token = svc_no_blacklist.create_service_token("projects-registry", ["service"])
-    payload = svc_no_blacklist.verify_token(token)
+    payload = await svc_no_blacklist.verify_token(token)
     assert payload["sub"] == "projects-registry"
     assert payload["type"] == "service"
     assert "service" in payload["roles"]

@@ -17,9 +17,11 @@ def get_token_service() -> TokenService:  # pragma: no cover
     raise NotImplementedError("TokenService not wired")
 
 
-def _require_admin(credentials: HTTPAuthorizationCredentials, token_service: TokenService) -> None:
+async def _require_admin(
+    credentials: HTTPAuthorizationCredentials, token_service: TokenService
+) -> None:
     try:
-        payload = token_service.verify_token(credentials.credentials)
+        payload = await token_service.verify_token(credentials.credentials)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,7 +40,7 @@ async def list_roles(
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict[str, object]:
     """List all available roles in the system."""
-    _require_admin(credentials, token_service)
+    await _require_admin(credentials, token_service)
     roles = [{"name": r.value, "description": _role_description(r)} for r in UserRole]
     logger.info("roles.list.success", count=len(roles))
     return {"roles": roles}

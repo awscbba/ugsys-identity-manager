@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/presentation/middleware/exception_handler.py
+# hypothesis_version: 6.151.9
+
+[401, 403, 404, 409, 422, 423, 500, 502, 'EMAIL_NOT_VERIFIED', 'INTERNAL_ERROR', 'Retry-After', 'code', 'domain_error', 'email_not_verified', 'error', 'message', 'meta', 'request_id', 'retry_after_seconds', 'unhandled_exception']

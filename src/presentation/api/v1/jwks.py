@@ -38,7 +38,6 @@ async def jwks() -> JSONResponse:
     return JSONResponse(
         content=jwks_doc,
         headers={
-            # Cache for 1 hour — consumers should re-fetch when kid is unknown
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "public, max-age=300",
         },
     )

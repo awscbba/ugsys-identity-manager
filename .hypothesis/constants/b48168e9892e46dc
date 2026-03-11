@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/infrastructure/persistence/dynamodb_user_repository.py
+# hypothesis_version: 6.151.9
+
+[':email', 'BOOL', 'Code', 'ConditionExpression', 'Error', 'ExclusiveStartKey', 'FilterExpression', 'Item', 'Items', 'L', 'LastEvaluatedKey', 'N', 'NOT_FOUND', 'PROFILE', 'Put', 'REPOSITORY_ERROR', 'S', 'TableName', 'User not found', 'account_locked_until', 'active', 'attribute_exists(pk)', 'created_at', 'delete', 'dynamodb', 'dynamodb.error', 'dynamodb.user.saved', 'email', 'email = :email', 'email-index', 'email_verified', 'email_verified_at', 'find_by_email', 'find_by_id', 'full_name', 'hashed_password', 'id', 'is_admin', 'last_login_at', 'last_password_change', 'list_all', 'list_paginated', 'member', 'pk', 'roles', 'save', 'sk', 'status', 'update', 'updated_at', 'us-east-1']

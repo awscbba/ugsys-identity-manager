@@ -16,11 +16,14 @@ class BcryptPasswordHasher:
         self._rounds = rounds
 
     def hash(self, password: str) -> str:
-        """Hash a plaintext password using bcrypt with a fresh random salt."""
-        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=self._rounds)).decode(
-            "utf-8"
-        )
+        """Hash a plaintext password using bcrypt with a fresh random salt.
+
+        Passwords are truncated to 72 bytes (bcrypt's hard limit) before hashing.
+        """
+        encoded = password.encode("utf-8")[:72]
+        return bcrypt.hashpw(encoded, bcrypt.gensalt(rounds=self._rounds)).decode("utf-8")
 
     def verify(self, plain: str, hashed: str) -> bool:
         """Verify a plaintext password against a bcrypt hash. Never raises on wrong password."""
-        return bool(bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8")))
+        encoded = plain.encode("utf-8")[:72]
+        return bool(bcrypt.checkpw(encoded, hashed.encode("utf-8")))

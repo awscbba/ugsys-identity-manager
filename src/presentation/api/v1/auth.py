@@ -15,6 +15,7 @@ from src.application.commands.verify_email import VerifyEmailCommand
 from src.application.dtos.auth_dtos import (
     ForgotPasswordRequest,
     LoginRequest,
+    LogoutRequest,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
@@ -153,11 +154,17 @@ async def resend_verification(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
+    body: LogoutRequest,
     credentials: HTTPAuthorizationCredentials = Depends(bearer),  # noqa: B008
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    """Logout — blacklists the access token."""
-    await service.logout(LogoutCommand(access_token=credentials.credentials))
+    """Logout — blacklists both the access token and the refresh token."""
+    await service.logout(
+        LogoutCommand(
+            access_token=credentials.credentials,
+            refresh_token=body.refresh_token,
+        )
+    )
     logger.info("auth.logout.success")
     request_id = correlation_id_var.get("")
     return success_response({"message": "Logged out successfully"}, request_id)
@@ -169,7 +176,7 @@ async def validate_token(
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """S2S token introspection — used by other services to validate JWTs."""
-    result = service.validate_token(ValidateTokenCommand(token=body.token))
+    result = await service.validate_token(ValidateTokenCommand(token=body.token))
     request_id = correlation_id_var.get("")
     return success_response(result, request_id)
 

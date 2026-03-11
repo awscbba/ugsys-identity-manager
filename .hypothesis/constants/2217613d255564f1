@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/application/services/auth_service.py
+# hypothesis_version: 6.151.9
+
+[1000, 'ACCOUNT_LOCKED', 'ALREADY_VERIFIED', 'EMAIL_ALREADY_EXISTS', 'EMAIL_NOT_VERIFIED', 'INVALID_CREDENTIALS', 'INVALID_TOKEN', 'Invalid credentials', 'NOT_FOUND', 'Resource not found', 'User', 'WEAK_PASSWORD', 'attempt_count', 'email', 'exp', 'expires_at', 'full_name', 'ip_address', 'jti', 'locked_until', 'password_reset', 'pending', 'refresh', 'retry_after_seconds', 'roles', 'secret', 'sub', 'token_id', 'type', 'user_id', 'valid', 'verification_token', 'violations']

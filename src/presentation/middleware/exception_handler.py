@@ -74,11 +74,13 @@ async def domain_exception_handler(request: Request, exc: DomainError) -> JSONRe
     )
 
     extra: dict[str, object] = {}
+    headers: dict[str, str] = {}
 
-    # Special handling for AccountLockedError — include retry_after_seconds
+    # Special handling for AccountLockedError — include retry_after_seconds + Retry-After header
     if isinstance(exc, AccountLockedError):
         retry_after = exc.additional_data.get("retry_after_seconds", 0)
         extra["retry_after_seconds"] = retry_after
+        headers["Retry-After"] = str(max(int(retry_after), 1))
 
     # Special handling for AuthenticationError subtypes
     if isinstance(exc, AuthenticationError):
@@ -94,7 +96,7 @@ async def domain_exception_handler(request: Request, exc: DomainError) -> JSONRe
         extra=extra,
     )
 
-    return JSONResponse(status_code=status, content=content)
+    return JSONResponse(status_code=status, content=content, headers=headers)
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

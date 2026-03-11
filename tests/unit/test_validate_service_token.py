@@ -21,30 +21,30 @@ def deps() -> tuple[AsyncMock, MagicMock, MagicMock, AsyncMock, PasswordValidato
     return repo, token_svc, hasher, token_blacklist, password_validator
 
 
-def test_validate_token_valid(
+@pytest.mark.asyncio
+async def test_validate_token_valid(
     deps: tuple[AsyncMock, MagicMock, MagicMock, AsyncMock, PasswordValidator],
 ) -> None:
     repo, token_svc, hasher, token_blacklist, password_validator = deps
-    token_svc.verify_token.return_value = {
-        "sub": "user-123",
-        "roles": ["member"],
-        "type": "access",
-    }
+    token_svc.verify_token = AsyncMock(
+        return_value={"sub": "user-123", "roles": ["member"], "type": "access"}
+    )
     svc = AuthService(repo, token_svc, hasher, token_blacklist, password_validator)
-    result = svc.validate_token(ValidateTokenCommand(token="valid"))
+    result = await svc.validate_token(ValidateTokenCommand(token="valid"))
     assert result["valid"] is True
     assert result["sub"] == "user-123"
     assert result["roles"] == ["member"]
     assert result["type"] == "access"
 
 
-def test_validate_token_invalid_returns_valid_false(
+@pytest.mark.asyncio
+async def test_validate_token_invalid_returns_valid_false(
     deps: tuple[AsyncMock, MagicMock, MagicMock, AsyncMock, PasswordValidator],
 ) -> None:
     repo, token_svc, hasher, token_blacklist, password_validator = deps
-    token_svc.verify_token.side_effect = ValueError("expired")
+    token_svc.verify_token = AsyncMock(side_effect=ValueError("expired"))
     svc = AuthService(repo, token_svc, hasher, token_blacklist, password_validator)
-    result = svc.validate_token(ValidateTokenCommand(token="bad"))
+    result = await svc.validate_token(ValidateTokenCommand(token="bad"))
     assert result["valid"] is False
     assert "sub" not in result
 

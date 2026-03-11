@@ -1,6 +1,6 @@
 """Unit tests for presentation layer: exception_handler, response_envelope, roles."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -286,45 +286,50 @@ def make_credentials(token: str = "test-token") -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
-def test_require_admin_raises_401_on_invalid_token() -> None:
+@pytest.mark.asyncio
+async def test_require_admin_raises_401_on_invalid_token() -> None:
     token_svc = MagicMock()
-    token_svc.verify_token.side_effect = ValueError("bad token")
+    token_svc.verify_token = AsyncMock(side_effect=ValueError("bad token"))
     creds = make_credentials()
     with pytest.raises(HTTPException) as exc_info:
-        _require_admin(creds, token_svc)
+        await _require_admin(creds, token_svc)
     assert exc_info.value.status_code == 401
 
 
-def test_require_admin_raises_403_when_no_admin_role() -> None:
+@pytest.mark.asyncio
+async def test_require_admin_raises_403_when_no_admin_role() -> None:
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"roles": ["member"]}
+    token_svc.verify_token = AsyncMock(return_value={"roles": ["member"]})
     creds = make_credentials()
     with pytest.raises(HTTPException) as exc_info:
-        _require_admin(creds, token_svc)
+        await _require_admin(creds, token_svc)
     assert exc_info.value.status_code == 403
 
 
-def test_require_admin_passes_with_admin_role() -> None:
+@pytest.mark.asyncio
+async def test_require_admin_passes_with_admin_role() -> None:
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"roles": ["admin"]}
+    token_svc.verify_token = AsyncMock(return_value={"roles": ["admin"]})
     creds = make_credentials()
     # Should not raise
-    _require_admin(creds, token_svc)
+    await _require_admin(creds, token_svc)
 
 
-def test_require_admin_passes_with_super_admin_role() -> None:
+@pytest.mark.asyncio
+async def test_require_admin_passes_with_super_admin_role() -> None:
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"roles": ["super_admin"]}
+    token_svc.verify_token = AsyncMock(return_value={"roles": ["super_admin"]})
     creds = make_credentials()
-    _require_admin(creds, token_svc)
+    await _require_admin(creds, token_svc)
 
 
-def test_require_admin_handles_non_list_roles() -> None:
+@pytest.mark.asyncio
+async def test_require_admin_handles_non_list_roles() -> None:
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"roles": None}
+    token_svc.verify_token = AsyncMock(return_value={"roles": None})
     creds = make_credentials()
     with pytest.raises(HTTPException) as exc_info:
-        _require_admin(creds, token_svc)
+        await _require_admin(creds, token_svc)
     assert exc_info.value.status_code == 403
 
 

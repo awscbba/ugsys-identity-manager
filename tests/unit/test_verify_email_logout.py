@@ -52,6 +52,7 @@ def make_service(
         token_svc = MagicMock()
         token_svc.create_access_token.return_value = "access"
         token_svc.create_refresh_token.return_value = "refresh"
+        token_svc.verify_token = AsyncMock()
     if hasher is None:
         hasher = MagicMock()
         hasher.verify.return_value = True
@@ -212,7 +213,7 @@ async def test_resend_verification_pending_with_events() -> None:
 async def test_logout_invalid_token_raises_auth_error() -> None:
     repo = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.side_effect = ValueError("expired")
+    token_svc.verify_token = AsyncMock(side_effect=ValueError("expired"))
     svc = make_service(repo, token_svc=token_svc)
 
     with pytest.raises(AuthenticationError) as exc_info:
@@ -225,7 +226,7 @@ async def test_logout_invalid_token_raises_auth_error() -> None:
 async def test_logout_missing_jti_raises_auth_error() -> None:
     repo = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"sub": "user-id", "exp": 9999999999}
+    token_svc.verify_token = AsyncMock(return_value={"sub": "user-id", "exp": 9999999999})
     # No "jti" key → jti will be empty string
     svc = make_service(repo, token_svc=token_svc)
 
@@ -240,10 +241,9 @@ async def test_logout_success_blacklists_jti() -> None:
     repo = AsyncMock()
     blacklist = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {
-        "jti": "some-jti",
-        "exp": 9999999999,
-    }  # gitguardian:ignore
+    token_svc.verify_token = AsyncMock(
+        return_value={"jti": "some-jti", "exp": 9999999999}
+    )  # gitguardian:ignore
     svc = make_service(repo, token_svc=token_svc, blacklist=blacklist)
 
     await svc.logout(LogoutCommand(access_token="valid-tok"))  # gitguardian:ignore

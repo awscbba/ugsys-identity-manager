@@ -23,7 +23,7 @@ class TokenService(ABC):
     def create_service_token(self, client_id: str, roles: list[str]) -> str: ...
 
     @abstractmethod
-    def verify_token(self, token: str) -> dict[str, object]:
+    async def verify_token(self, token: str) -> dict[str, object]:
         """Verify token signature, expiry, and blacklist status.
 
         Raises AuthenticationError if token is invalid, expired, or blacklisted.

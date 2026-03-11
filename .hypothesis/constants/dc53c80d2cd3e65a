@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/presentation/api/v1/roles.py
+# hypothesis_version: 6.151.9
+
+['/roles', 'Bearer', 'WWW-Authenticate', 'admin', 'description', 'name', 'roles', 'roles.list.success', 'super_admin']

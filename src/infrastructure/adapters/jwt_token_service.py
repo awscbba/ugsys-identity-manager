@@ -4,13 +4,13 @@ Uses RS256 exclusively:
   - private_key (PEM) — signs tokens
   - public_key  (PEM) — verifies tokens, exposed via JWKS endpoint
   - key_id            — included as 'kid' in JWT header and JWKS
+  - retiring_public_key (PEM, optional) — verifies tokens signed with the previous key
+  - retiring_key_id   (optional)        — kid for the retiring key
 """
 
 from __future__ import annotations
 
-import asyncio
 import base64
-import concurrent.futures
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -29,12 +29,16 @@ class JWTTokenService(TokenService):
         key_id: str = "ugsys-v1",
         token_blacklist: TokenBlacklistRepository | None = None,
         audience: str = "admin-panel",
+        retiring_public_key: str | None = None,
+        retiring_key_id: str | None = None,
     ) -> None:
         self._private_key = private_key
         self._public_key = public_key
         self._key_id = key_id
         self._token_blacklist = token_blacklist
         self._audience = audience
+        self._retiring_public_key = retiring_public_key
+        self._retiring_key_id = retiring_key_id
         self._access_ttl = timedelta(minutes=30)
         self._refresh_ttl = timedelta(days=7)
         self._reset_ttl = timedelta(hours=1)
@@ -71,7 +75,7 @@ class JWTTokenService(TokenService):
 
     # ── Token verification ────────────────────────────────────────────────────
 
-    def verify_token(self, token: str) -> dict[str, object]:
+    async def verify_token(self, token: str) -> dict[str, object]:
         # Step 1: Pre-check algorithm header BEFORE signature verification
         try:
             header = jwt.get_unverified_header(token)
@@ -91,13 +95,30 @@ class JWTTokenService(TokenService):
                 error_code="INVALID_TOKEN",
             )
 
-        # Step 2: Decode and verify signature using the public key
-        # Pass audience so jose enforces aud validation on access tokens.
-        # For token types without aud (refresh, reset, service), jose skips
-        # audience validation when the claim is absent — safe for all types.
+        # Step 2: Select public key by kid
+        kid = header.get("kid", "")
+        if kid == self._key_id:
+            verify_key = self._public_key
+        elif self._retiring_key_id and kid == self._retiring_key_id:
+            if self._retiring_public_key is None:
+                raise AuthenticationError(
+                    message=f"Retiring key '{kid}' referenced but no retiring public key configured",  # noqa: E501
+                    user_message="Invalid or expired token",
+                    error_code="INVALID_TOKEN",
+                )
+            verify_key = self._retiring_public_key
+        else:
+            raise AuthenticationError(
+                message=f"Unknown kid '{kid}' — not active key '{self._key_id}'"
+                + (f" or retiring key '{self._retiring_key_id}'" if self._retiring_key_id else ""),
+                user_message="Invalid or expired token",
+                error_code="INVALID_TOKEN",
+            )
+
+        # Step 3: Decode and verify signature
         try:
             payload: dict[str, object] = jwt.decode(
-                token, self._public_key, algorithms=["RS256"], audience=self._audience
+                token, verify_key, algorithms=["RS256"], audience=self._audience
             )
         except JWTError as e:
             raise AuthenticationError(
@@ -106,7 +127,7 @@ class JWTTokenService(TokenService):
                 error_code="INVALID_TOKEN",
             ) from e
 
-        # Step 3: Validate required claims
+        # Step 4: Validate required claims
         for claim in ("sub", "exp", "iat", "iss"):
             if claim not in payload:
                 raise AuthenticationError(
@@ -115,11 +136,11 @@ class JWTTokenService(TokenService):
                     error_code="INVALID_TOKEN",
                 )
 
-        # Step 4: Check blacklist if configured
+        # Step 5: Check blacklist (async — no thread-pool workaround needed)
         if self._token_blacklist is not None:
             jti = str(payload.get("jti", ""))
             if jti:
-                is_blocked = self._check_blacklist(jti)
+                is_blocked = await self._token_blacklist.is_blacklisted(jti)
                 if is_blocked:
                     raise AuthenticationError(
                         message=f"Token {jti} has been revoked",
@@ -132,21 +153,23 @@ class JWTTokenService(TokenService):
     # ── JWKS ──────────────────────────────────────────────────────────────────
 
     def get_jwks(self) -> dict[str, object]:
-        """
-        Return the public key set in JWKS format (RFC 7517).
+        """Return the public key set in JWKS format (RFC 7517).
 
-        Consumers (other services, admin panel) fetch this endpoint to obtain
-        the public key needed to verify tokens without sharing any secret.
-
-        The 'n' and 'e' values are the RSA modulus and exponent encoded as
-        base64url (no padding), as required by RFC 7518 §6.3.
+        Includes the active key and, when configured, the retiring key so that
+        consumers can verify tokens signed with either key during rotation overlap.
         """
+        keys = [self._build_jwk_entry(self._public_key, self._key_id)]
+        if self._retiring_public_key and self._retiring_key_id:
+            keys.append(self._build_jwk_entry(self._retiring_public_key, self._retiring_key_id))
+        return {"keys": keys}
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _build_jwk_entry(self, pem: str, kid: str) -> dict[str, object]:
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
         from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
-        pub = load_pem_public_key(self._public_key.encode())
-
-        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-
+        pub = load_pem_public_key(pem.encode())
         if not isinstance(pub, RSAPublicKey):
             raise ValueError("Public key is not an RSA key")
 
@@ -157,30 +180,13 @@ class JWTTokenService(TokenService):
             return base64.urlsafe_b64encode(n.to_bytes(byte_length, "big")).rstrip(b"=").decode()
 
         return {
-            "keys": [
-                {
-                    "kty": "RSA",
-                    "use": "sig",
-                    "alg": "RS256",
-                    "kid": self._key_id,
-                    "n": _b64url(pub_numbers.n),
-                    "e": _b64url(pub_numbers.e),
-                }
-            ]
+            "kty": "RSA",
+            "use": "sig",
+            "alg": "RS256",
+            "kid": kid,
+            "n": _b64url(pub_numbers.n),
+            "e": _b64url(pub_numbers.e),
         }
-
-    # ── Private helpers ───────────────────────────────────────────────────────
-
-    def _check_blacklist(self, jti: str) -> bool:
-        """Run the async is_blacklisted check from a sync context."""
-        assert self._token_blacklist is not None
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self._token_blacklist.is_blacklisted(jti))
-
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, self._token_blacklist.is_blacklisted(jti)).result()
 
     def _encode(self, payload: dict[str, object], ttl: timedelta) -> str:
         now = datetime.now(UTC)

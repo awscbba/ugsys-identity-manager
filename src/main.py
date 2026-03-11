@@ -70,10 +70,9 @@ def _load_service_accounts(cfg: Settings) -> dict[str, dict[str, object]]:
 
 def _wire_dependencies(app: FastAPI) -> None:
     """Wire infrastructure adapters into presentation layer via dependency overrides."""
-    import bcrypt as _bcrypt_lib
-
     from src.application.services.auth_service import AuthService
     from src.application.services.user_service import UserService
+    from src.infrastructure.adapters.bcrypt_password_hasher import BcryptPasswordHasher
     from src.infrastructure.adapters.jwt_token_service import JWTTokenService
     from src.infrastructure.messaging.event_publisher import EventBridgePublisher
     from src.infrastructure.persistence.dynamodb_outbox_repository import DynamoDBOutboxRepository
@@ -110,6 +109,8 @@ def _wire_dependencies(app: FastAPI) -> None:
         key_id=settings.jwt_key_id,
         token_blacklist=token_blacklist,
         audience=settings.jwt_audience,
+        retiring_public_key=settings.jwt_retiring_public_key,
+        retiring_key_id=settings.jwt_retiring_key_id,
     )
     event_publisher = EventBridgePublisher(
         bus_name=settings.event_bus_name,
@@ -124,25 +125,20 @@ def _wire_dependencies(app: FastAPI) -> None:
     )
     unit_of_work = DynamoDBUnitOfWork(region=settings.aws_region, session=session)
 
-    class _BcryptHasher:
-        def hash(self, password: str) -> str:
-            return _bcrypt_lib.hashpw(password.encode("utf-8"), _bcrypt_lib.gensalt()).decode(
-                "utf-8"
-            )
-
-        def verify(self, plain: str, hashed: str) -> bool:
-            return bool(_bcrypt_lib.checkpw(plain.encode("utf-8"), hashed.encode("utf-8")))
+    password_hasher = BcryptPasswordHasher(rounds=settings.bcrypt_rounds)
 
     auth_service = AuthService(
         user_repo=user_repo,
         token_service=token_service,
-        password_hasher=_BcryptHasher(),
+        password_hasher=password_hasher,
         token_blacklist=token_blacklist,
         password_validator=password_validator,
         event_publisher=event_publisher,
         service_accounts=_load_service_accounts(settings),
         outbox_repo=outbox_repo,
         unit_of_work=unit_of_work,
+        login_max_attempts=settings.login_max_attempts,
+        login_lockout_minutes=settings.login_lockout_minutes,
     )
     user_service = UserService(user_repo=user_repo, event_publisher=event_publisher)
 

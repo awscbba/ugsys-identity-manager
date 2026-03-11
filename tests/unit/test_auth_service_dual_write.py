@@ -60,10 +60,12 @@ def make_auth_service(
 ) -> AuthService:
     token_svc = MagicMock()
     token_svc.create_password_reset_token.return_value = "reset-jwt-token"
-    token_svc.verify_token.return_value = {
-        "sub": str(uuid4()),
-        "type": "password_reset",
-    }
+    token_svc.verify_token = AsyncMock(
+        return_value={
+            "sub": str(uuid4()),
+            "type": "password_reset",
+        }
+    )
 
     hasher = MagicMock()
     hasher.hash.return_value = "hashed_pw"

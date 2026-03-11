@@ -82,11 +82,11 @@ class User:
             return False
         return self.account_locked_until > datetime.now(UTC)
 
-    def record_failed_login(self) -> None:
-        """Increment failed_login_attempts; lock for 30 min at 5 failures."""
+    def record_failed_login(self, max_attempts: int = 5, lockout_minutes: int = 30) -> None:
+        """Increment failed_login_attempts; lock for lockout_minutes at max_attempts failures."""
         self.failed_login_attempts += 1
-        if self.failed_login_attempts >= 5:
-            self.account_locked_until = datetime.now(UTC) + timedelta(minutes=30)
+        if self.failed_login_attempts >= max_attempts:
+            self.account_locked_until = datetime.now(UTC) + timedelta(minutes=lockout_minutes)
 
     def reset_login_attempts(self) -> None:
         """Reset failed_login_attempts to 0 and clear account_locked_until."""
