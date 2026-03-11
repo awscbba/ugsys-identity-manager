@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/domain/exceptions.py
+# hypothesis_version: 6.151.9
+
+['ACCOUNT_LOCKED', 'An error occurred', 'CONFLICT', 'FORBIDDEN', 'INTERNAL_ERROR', 'NOT_FOUND', 'REPOSITORY_ERROR', 'VALIDATION_ERROR']

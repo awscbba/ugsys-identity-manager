@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/presentation/middleware/tracing.py
+# hypothesis_version: 6.151.9
+
+[400, 500, 'correlation_id', 'http_method', 'http_path', 'http_status']

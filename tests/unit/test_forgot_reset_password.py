@@ -27,6 +27,7 @@ def make_user(status: UserStatus = UserStatus.ACTIVE) -> User:
 def deps() -> tuple[AsyncMock, MagicMock, MagicMock, AsyncMock, PasswordValidator]:
     repo = AsyncMock()
     token_svc = MagicMock()
+    token_svc.verify_token = AsyncMock()
     hasher = MagicMock()
     token_blacklist = AsyncMock()
     password_validator = PasswordValidator()

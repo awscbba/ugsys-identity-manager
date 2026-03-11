@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/presentation/middleware/security_headers.py
+# hypothesis_version: 6.151.9
+
+['/api/', '0', 'Cache-Control', 'DENY', 'Permissions-Policy', 'Referrer-Policy', 'X-Frame-Options', 'X-XSS-Protection', 'nosniff', 'same-origin', 'server']

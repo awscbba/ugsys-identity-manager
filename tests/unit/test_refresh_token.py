@@ -28,7 +28,7 @@ def auth_service(active_user: User) -> AuthService:
     repo = AsyncMock()
     repo.find_by_id.return_value = active_user
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"sub": str(active_user.id), "type": "refresh"}
+    token_svc.verify_token = AsyncMock(return_value={"sub": str(active_user.id), "type": "refresh"})
     token_svc.create_access_token.return_value = "new_access"
     token_svc.create_refresh_token.return_value = "new_refresh"
     hasher = MagicMock()
@@ -52,7 +52,7 @@ async def test_refresh_returns_new_token_pair(auth_service: AuthService) -> None
 async def test_refresh_rejects_invalid_token(active_user: User) -> None:
     repo = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.side_effect = ValueError("expired")
+    token_svc.verify_token = AsyncMock(side_effect=ValueError("expired"))
     token_blacklist = AsyncMock()
     password_validator = PasswordValidator()
     svc = AuthService(
@@ -70,7 +70,7 @@ async def test_refresh_rejects_invalid_token(active_user: User) -> None:
 async def test_refresh_rejects_access_token_used_as_refresh(active_user: User) -> None:
     repo = AsyncMock()
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"sub": str(active_user.id), "type": "access"}
+    token_svc.verify_token = AsyncMock(return_value={"sub": str(active_user.id), "type": "access"})
     token_blacklist = AsyncMock()
     password_validator = PasswordValidator()
     svc = AuthService(

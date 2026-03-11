@@ -59,6 +59,8 @@ class AuthService(IAuthService):
         service_accounts: ServiceAccountsMap | None = None,
         outbox_repo: OutboxRepository | None = None,
         unit_of_work: UnitOfWork | None = None,
+        login_max_attempts: int = 5,
+        login_lockout_minutes: int = 30,
     ) -> None:
         self._user_repo = user_repo
         self._token_service = token_service
@@ -69,6 +71,8 @@ class AuthService(IAuthService):
         self._service_accounts: ServiceAccountsMap = service_accounts or {}
         self._outbox_repo = outbox_repo
         self._unit_of_work = unit_of_work
+        self._login_max_attempts = login_max_attempts
+        self._login_lockout_minutes = login_lockout_minutes
 
     async def register(self, command: RegisterUserCommand) -> User:
         logger.info("auth_service.register.started", email=command.email)
@@ -188,7 +192,10 @@ class AuthService(IAuthService):
 
         # 4. Verify password
         if not self._password_hasher.verify(command.password, user.hashed_password):
-            user.record_failed_login()
+            user.record_failed_login(
+                max_attempts=self._login_max_attempts,
+                lockout_minutes=self._login_lockout_minutes,
+            )
             await self._user_repo.update(user)
 
             if self._events:
@@ -200,8 +207,8 @@ class AuthService(IAuthService):
                         "attempt_count": user.failed_login_attempts,
                     },
                 )
-                # On 5th failure (account now locked), also publish account_locked
-                if user.failed_login_attempts >= 5:
+                # On Nth failure (account now locked), also publish account_locked
+                if user.failed_login_attempts >= self._login_max_attempts:
                     await self._events.publish(
                         detail_type="identity.auth.account_locked",
                         payload={
@@ -226,7 +233,7 @@ class AuthService(IAuthService):
                 )
                 raise AccountLockedError(
                     message=(
-                        f"Account {user.id} locked after 5 failed attempts"
+                        f"Account {user.id} locked after {self._login_max_attempts} failed attempts"
                         f" until {user.account_locked_until}"
                     ),
                     user_message=(
@@ -303,7 +310,7 @@ class AuthService(IAuthService):
         logger.info("auth_service.refresh.started")
         start = time.perf_counter()
         try:
-            payload = self._token_service.verify_token(command.refresh_token)
+            payload = await self._token_service.verify_token(command.refresh_token)
         except (ValueError, AuthenticationError) as e:
             logger.warning("auth_service.refresh.invalid_token", error=str(e))
             raise AuthenticationError(
@@ -379,7 +386,7 @@ class AuthService(IAuthService):
         logger.info("auth_service.reset_password.started")
         start = time.perf_counter()
         try:
-            payload = self._token_service.verify_token(command.token)
+            payload = await self._token_service.verify_token(command.token)
         except (ValueError, AuthenticationError) as e:
             logger.warning("auth_service.reset_password.invalid_token", error=str(e))
             raise AuthenticationError(
@@ -452,7 +459,7 @@ class AuthService(IAuthService):
             duration_ms=round((time.perf_counter() - start) * 1000, 2),
         )
 
-    def validate_token(self, command: ValidateTokenCommand) -> dict[str, object]:
+    async def validate_token(self, command: ValidateTokenCommand) -> dict[str, object]:
         """Introspect a token — used by other services for S2S validation.
 
         Returns {valid: true, sub, roles, type} on success,
@@ -460,7 +467,7 @@ class AuthService(IAuthService):
         """
         logger.info("auth_service.validate_token.started")
         try:
-            payload = self._token_service.verify_token(command.token)
+            payload = await self._token_service.verify_token(command.token)
         except (ValueError, AuthenticationError) as e:
             logger.warning("auth_service.validate_token.invalid", error=str(e))
             return {"valid": False}
@@ -592,12 +599,12 @@ class AuthService(IAuthService):
         )
 
     async def logout(self, command: LogoutCommand) -> None:
-        """Logout by blacklisting the access token's jti."""
+        """Logout by blacklisting the access token's jti and the refresh token's jti."""
         logger.info("auth_service.logout.started")
         start = time.perf_counter()
 
         try:
-            payload = self._token_service.verify_token(command.access_token)
+            payload = await self._token_service.verify_token(command.access_token)
         except Exception as e:
             logger.warning("auth_service.logout.invalid_token", error=str(e))
             raise AuthenticationError(
@@ -617,6 +624,23 @@ class AuthService(IAuthService):
         exp_raw = payload.get("exp", 0)
         exp = int(exp_raw) if isinstance(exp_raw, (int, float, str)) else 0
         await self._token_blacklist.add(jti, exp)
+
+        # Blacklist refresh token if provided — tolerate invalid/missing refresh token
+        if command.refresh_token:
+            try:
+                refresh_payload = await self._token_service.verify_token(command.refresh_token)
+                refresh_jti = str(refresh_payload.get("jti", ""))
+                if refresh_jti:
+                    refresh_exp_raw = refresh_payload.get("exp", 0)
+                    refresh_exp = (
+                        int(refresh_exp_raw)
+                        if isinstance(refresh_exp_raw, (int, float, str))
+                        else 0
+                    )
+                    await self._token_blacklist.add(refresh_jti, refresh_exp)
+            except Exception as e:
+                logger.warning("auth_service.logout.refresh_token_invalid", error=str(e))
+                # Do not re-raise — access token is already blacklisted
 
         logger.info(
             "auth_service.logout.completed",

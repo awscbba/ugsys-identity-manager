@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/infrastructure/persistence/dynamodb_token_blacklist.py
+# hypothesis_version: 6.151.9
+
+['Code', 'Error', 'Item', 'REPOSITORY_ERROR', 'add', 'dynamodb', 'dynamodb.error', 'is_blacklisted', 'jti', 'token_blacklist.hit', 'ttl', 'us-east-1']

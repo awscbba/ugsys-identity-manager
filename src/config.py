@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 
 import boto3
+import structlog as _structlog
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,6 +20,8 @@ class RsaKeyPair:
     private_key: str  # PEM — used to sign tokens
     public_key: str  # PEM — used to verify tokens, served via JWKS
     key_id: str  # kid — included in JWT header and JWKS
+    retiring_public_key: str | None = None  # PEM — optional, verifies old tokens during overlap
+    retiring_key_id: str | None = None  # kid for retiring key
 
 
 def _resolve_rsa_keys() -> RsaKeyPair:
@@ -36,7 +39,15 @@ def _resolve_rsa_keys() -> RsaKeyPair:
     key_id = os.environ.get("JWT_KEY_ID", "dev-key")
 
     if private_key and public_key:
-        return RsaKeyPair(private_key=private_key, public_key=public_key, key_id=key_id)
+        retiring_public_key = os.environ.get("JWT_RETIRING_PUBLIC_KEY") or None
+        retiring_key_id = os.environ.get("JWT_RETIRING_KEY_ID") or None
+        return RsaKeyPair(
+            private_key=private_key,
+            public_key=public_key,
+            key_id=key_id,
+            retiring_public_key=retiring_public_key,
+            retiring_key_id=retiring_key_id,
+        )
 
     secret_arn = os.environ.get("JWT_KEYS_SECRET_ARN", "")
     if secret_arn:
@@ -48,6 +59,8 @@ def _resolve_rsa_keys() -> RsaKeyPair:
             private_key=parsed["private_key"],
             public_key=parsed["public_key"],
             key_id=parsed.get("key_id", "ugsys-v1"),
+            retiring_public_key=parsed.get("retiring_public_key") or None,
+            retiring_key_id=parsed.get("retiring_key_id") or None,
         )
 
     # Local dev fallback — generate a throwaway key pair so the service starts
@@ -81,7 +94,17 @@ def _resolve_rsa_keys() -> RsaKeyPair:
 
 
 # Resolved once at module load — Lambda cold start reads from Secrets Manager here.
+_previous_key_id: str | None = None
 _rsa_keys = _resolve_rsa_keys()
+
+_config_logger = _structlog.get_logger()
+if _previous_key_id is not None and _previous_key_id != _rsa_keys.key_id:
+    _config_logger.info(
+        "key_rotation.detected",
+        old_kid=_previous_key_id,
+        new_kid=_rsa_keys.key_id,
+    )
+_previous_key_id = _rsa_keys.key_id
 
 
 class Settings(BaseSettings):
@@ -105,6 +128,13 @@ class Settings(BaseSettings):
     # Audience embedded in access tokens — consumers must validate this claim
     jwt_audience: str = "admin-panel"
 
+    # Password hashing — work factor for bcrypt
+    bcrypt_rounds: int = 12  # loaded from BCRYPT_ROUNDS env var
+
+    # Login brute-force protection
+    login_max_attempts: int = 5  # loaded from LOGIN_MAX_ATTEMPTS env var
+    login_lockout_minutes: int = 30  # loaded from LOGIN_LOCKOUT_MINUTES env var
+
     # Resolved key pair — read-only properties backed by module-level _rsa_keys
     @property
     def jwt_private_key(self) -> str:
@@ -118,6 +148,14 @@ class Settings(BaseSettings):
     def jwt_key_id(self) -> str:
         return _rsa_keys.key_id
 
+    @property
+    def jwt_retiring_public_key(self) -> str | None:
+        return _rsa_keys.retiring_public_key
+
+    @property
+    def jwt_retiring_key_id(self) -> str | None:
+        return _rsa_keys.retiring_key_id
+
     @field_validator("jwt_algorithm")
     @classmethod
     def validate_jwt_algorithm(cls, v: str) -> str:
@@ -125,6 +163,27 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"jwt_algorithm must be 'RS256', got '{v}'. HS256 and 'none' are not allowed."
             )
+        return v
+
+    @field_validator("bcrypt_rounds")
+    @classmethod
+    def validate_bcrypt_rounds(cls, v: int) -> int:
+        if v < 12:
+            raise ValueError(f"bcrypt_rounds must be >= 12, got {v}")
+        return v
+
+    @field_validator("login_max_attempts")
+    @classmethod
+    def validate_login_max_attempts(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"login_max_attempts must be >= 1, got {v}")
+        return v
+
+    @field_validator("login_lockout_minutes")
+    @classmethod
+    def validate_login_lockout_minutes(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"login_lockout_minutes must be >= 1, got {v}")
         return v
 
     # CORS — comma-separated list of allowed origins.

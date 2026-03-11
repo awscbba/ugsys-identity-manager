@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/presentation/middleware/rate_limiting.py
+# hypothesis_version: 6.151.9
+
+[1.0, 60.0, 3600.0, 429, 1000, 'Authorization', 'Bearer ', 'RATE_LIMIT_EXCEEDED', 'Retry-After', 'Too many requests', 'X-Forwarded-For', 'X-RateLimit-Limit', 'X-RateLimit-Reset', 'error', 'message', 'rate_limit.exceeded', 'sub', 'unknown']

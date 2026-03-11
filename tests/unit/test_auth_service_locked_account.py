@@ -30,6 +30,7 @@ def _make_locked_user() -> User:
 
 def _make_service(repo: AsyncMock) -> AuthService:
     token_svc = MagicMock()
+    token_svc.verify_token = AsyncMock()
     hasher = MagicMock()
     hasher.verify.return_value = True
     blacklist = AsyncMock()
@@ -104,7 +105,7 @@ async def test_refresh_inactive_user_raises_invalid_token() -> None:
     repo.find_by_id.return_value = inactive_user
 
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"sub": str(user_id), "type": "refresh"}
+    token_svc.verify_token = AsyncMock(return_value={"sub": str(user_id), "type": "refresh"})
 
     svc = AuthService(
         user_repo=repo,
@@ -130,7 +131,7 @@ async def test_refresh_user_not_found_raises_invalid_token() -> None:
     repo.find_by_id.return_value = None
 
     token_svc = MagicMock()
-    token_svc.verify_token.return_value = {"sub": str(user_id), "type": "refresh"}
+    token_svc.verify_token = AsyncMock(return_value={"sub": str(user_id), "type": "refresh"})
 
     svc = AuthService(
         user_repo=repo,

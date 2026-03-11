@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/infrastructure/messaging/event_publisher.py
+# hypothesis_version: 6.151.9
+
+['1.0', 'Detail', 'DetailType', 'Entries', 'EventBusName', 'FailedEntryCount', 'Source', 'correlation_id', 'event.publish_failed', 'event.published', 'event_id', 'event_version', 'events', 'payload', 'timestamp', 'us-east-1']

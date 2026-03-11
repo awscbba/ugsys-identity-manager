@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/application/dtos/auth_dtos.py
+# hypothesis_version: 6.151.9
+
+[3600, 'bearer', 'full_name']

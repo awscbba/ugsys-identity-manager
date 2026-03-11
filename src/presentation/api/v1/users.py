@@ -41,12 +41,12 @@ def get_token_service() -> TokenService:  # pragma: no cover
     raise NotImplementedError("TokenService not wired")
 
 
-def _extract_claims(
+async def _extract_claims(
     credentials: HTTPAuthorizationCredentials,
     token_service: TokenService,
 ) -> dict:  # type: ignore[type-arg]
     """Extract and verify JWT claims. Domain exceptions propagate to exception_handler."""
-    return token_service.verify_token(credentials.credentials)
+    return await token_service.verify_token(credentials.credentials)
 
 
 def _user_dict(user: object) -> dict:  # type: ignore[type-arg]
@@ -75,7 +75,7 @@ async def list_users(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     query = ListUsersQuery(
         page=page,
@@ -99,7 +99,7 @@ async def get_me(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     user_id = UUID(str(claims["sub"]))
     user = await user_service.get_user(
         GetUserQuery(user_id=user_id, requester_id=str(user_id), is_admin=False)
@@ -118,7 +118,7 @@ async def get_user(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     roles: list[str] = list(claims.get("roles", []))
     is_admin = "admin" in roles or "super_admin" in roles
@@ -140,7 +140,7 @@ async def update_profile(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     user = await user_service.update_profile(
         UpdateProfileCommand(
@@ -164,7 +164,7 @@ async def assign_role(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     user = await user_service.assign_role(
         AssignRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
     )
@@ -180,7 +180,7 @@ async def remove_role(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     user = await user_service.remove_role(
         RemoveRoleCommand(user_id=user_id, role=role, requester_id=str(claims["sub"]))
     )
@@ -195,7 +195,7 @@ async def get_user_roles(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     roles: list[str] = list(claims.get("roles", []))
     is_admin = "admin" in roles or "super_admin" in roles
@@ -218,7 +218,7 @@ async def deactivate_user(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     user = await user_service.deactivate(
         DeactivateUserCommand(user_id=user_id, requester_id=str(claims["sub"]))
     )
@@ -236,7 +236,7 @@ async def suspend_user(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     user = await user_service.suspend_user(
         SuspendUserCommand(user_id=user_id, admin_id=requester_id)
@@ -252,7 +252,7 @@ async def activate_user(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     user = await user_service.activate_user(
         ActivateUserCommand(user_id=user_id, admin_id=requester_id)
@@ -268,7 +268,7 @@ async def require_password_change(
     user_service: IUserService = Depends(get_user_service),  # noqa: B008
     token_service: TokenService = Depends(get_token_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    claims = _extract_claims(credentials, token_service)
+    claims = await _extract_claims(credentials, token_service)
     requester_id = str(claims["sub"])
     user = await user_service.require_password_change(
         RequirePasswordChangeCommand(user_id=user_id, admin_id=requester_id)

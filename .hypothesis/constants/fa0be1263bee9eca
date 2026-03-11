@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/infrastructure/adapters/jwt_token_service.py
+# hypothesis_version: 6.151.9
+
+[b'=', 'INVALID_TOKEN', 'RS256', 'RSA', 'TOKEN_REVOKED', 'access', 'admin-panel', 'alg', 'aud', 'big', 'e', 'email', 'exp', 'iat', 'iss', 'jti', 'keys', 'kid', 'kty', 'n', 'password_reset', 'refresh', 'roles', 'service', 'sig', 'sub', 'type', 'ugsys-v1', 'use']

@@ -1,0 +1,4 @@
+# file: /home/walsen/Projects/Community/AWS/UserGroupCochabamba/GitHub/ugsys/ugsys-identity-manager/src/config.py
+# hypothesis_version: 6.151.9
+
+[2048, 65537, ',', '.env', '0.1.0', 'APP_ENV', 'AWS_REGION', 'ENVIRONMENT', 'INFO', 'JWT_KEYS_SECRET_ARN', 'JWT_KEY_ID', 'JWT_PRIVATE_KEY', 'JWT_PUBLIC_KEY', 'JWT_RETIRING_KEY_ID', 'RS256', 'SecretString', 'admin-panel', 'bcrypt_rounds', 'dev', 'dev-ephemeral', 'dev-key', 'jwt_algorithm', 'key_id', 'login_max_attempts', 'private_key', 'public_key', 'retiring_key_id', 'retiring_public_key', 'secretsmanager', 'ugsys', 'ugsys-platform-bus', 'ugsys-v1', 'us-east-1', '{}']
