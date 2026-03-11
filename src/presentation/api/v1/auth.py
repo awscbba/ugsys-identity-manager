@@ -1,7 +1,7 @@
 """Auth router — /api/v1/auth endpoints."""
 
 import structlog
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Cookie, Depends, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.application.commands.authenticate_user import AuthenticateCommand
@@ -25,12 +25,17 @@ from src.application.dtos.auth_dtos import (
     VerifyEmailRequest,
 )
 from src.application.interfaces.auth_service import IAuthService
+from src.config import settings
+from src.domain.exceptions import AuthenticationError
 from src.presentation.middleware.correlation_id import correlation_id_var
 from src.presentation.response_envelope import success_response
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer = HTTPBearer()
+
+# Refresh token cookie TTL — matches jwt_refresh_ttl_days (7 days in seconds)
+_REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
 
 
 # ── Dependency ────────────────────────────────────────────────────────────────
@@ -39,6 +44,37 @@ bearer = HTTPBearer()
 def get_auth_service() -> IAuthService:  # pragma: no cover
     """Dependency — overridden in main.py via app.dependency_overrides."""
     raise NotImplementedError("AuthService not wired")
+
+
+# ── Cookie helpers ────────────────────────────────────────────────────────────
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    """Set the httpOnly refresh token cookie scoped to the platform domain."""
+    response.set_cookie(
+        key=settings.refresh_token_cookie_name,
+        value=token,
+        max_age=_REFRESH_COOKIE_MAX_AGE,
+        path="/api/v1/auth",
+        domain=settings.cookie_domain,
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    """Expire the refresh token cookie immediately."""
+    response.set_cookie(
+        key=settings.refresh_token_cookie_name,
+        value="",
+        max_age=0,
+        path="/api/v1/auth",
+        domain=settings.cookie_domain,
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -64,16 +100,19 @@ async def register(
 @router.post("/login")
 async def login(
     body: LoginRequest,
+    response: Response,
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     tokens = await service.authenticate(
         AuthenticateCommand(email=str(body.email), password=body.password)
     )
     logger.info("auth.login.success")
+    # Set httpOnly cookie for browser clients (cross-subdomain session persistence)
+    _set_refresh_cookie(response, tokens.refresh_token)
     request_id = correlation_id_var.get("")
     data: dict[str, object] = {
         "access_token": tokens.access_token,
-        "refresh_token": tokens.refresh_token,
+        "refresh_token": tokens.refresh_token,  # kept for non-browser / API clients
         "token_type": "bearer",
         "expires_in": 1800,  # 30 minutes in seconds — matches jwt_access_ttl_minutes
     }
@@ -85,10 +124,27 @@ async def login(
 @router.post("/refresh")
 async def refresh(
     body: RefreshRequest,
+    response: Response,
+    ugsys_refresh_token: str | None = Cookie(default=None),
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    tokens = await service.refresh(RefreshTokenCommand(refresh_token=body.refresh_token))
+    # Cookie-first precedence: browser clients use the httpOnly cookie;
+    # non-browser / API clients fall back to the JSON body token.
+    token = ugsys_refresh_token or body.refresh_token
+    if not token:
+        _clear_refresh_cookie(response)
+        raise AuthenticationError(
+            message="No refresh token provided in cookie or body",
+            user_message="Session expired. Please log in again.",
+            error_code="MISSING_REFRESH_TOKEN",
+        )
+    try:
+        tokens = await service.refresh(RefreshTokenCommand(refresh_token=token))
+    except Exception:
+        _clear_refresh_cookie(response)
+        raise
     logger.info("auth.refresh.success")
+    _set_refresh_cookie(response, tokens.refresh_token)
     request_id = correlation_id_var.get("")
     return success_response(
         {
@@ -155,16 +211,21 @@ async def resend_verification(
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
     body: LogoutRequest,
+    response: Response,
     credentials: HTTPAuthorizationCredentials = Depends(bearer),  # noqa: B008
+    ugsys_refresh_token: str | None = Cookie(default=None),
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Logout — blacklists both the access token and the refresh token."""
+    # Cookie-first precedence for the refresh token
+    refresh_token = ugsys_refresh_token or body.refresh_token
     await service.logout(
         LogoutCommand(
             access_token=credentials.credentials,
-            refresh_token=body.refresh_token,
+            refresh_token=refresh_token,
         )
     )
+    _clear_refresh_cookie(response)
     logger.info("auth.logout.success")
     request_id = correlation_id_var.get("")
     return success_response({"message": "Logged out successfully"}, request_id)
