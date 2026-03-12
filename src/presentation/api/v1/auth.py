@@ -1,7 +1,7 @@
 """Auth router — /api/v1/auth endpoints."""
 
 import structlog
-from fastapi import APIRouter, Cookie, Depends, Response, status
+from fastapi import APIRouter, Body, Cookie, Depends, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.application.commands.authenticate_user import AuthenticateCommand
@@ -123,14 +123,14 @@ async def login(
 
 @router.post("/refresh")
 async def refresh(
-    body: RefreshRequest,
     response: Response,
     ugsys_refresh_token: str | None = Cookie(default=None),
+    body: RefreshRequest | None = Body(default=None),  # noqa: B008
     service: IAuthService = Depends(get_auth_service),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
-    # Cookie-first precedence: browser clients use the httpOnly cookie;
+    # Cookie-first precedence: browser clients send no body (cookie only);
     # non-browser / API clients fall back to the JSON body token.
-    token = ugsys_refresh_token or body.refresh_token
+    token = ugsys_refresh_token or (body.refresh_token if body else "")
     if not token:
         _clear_refresh_cookie(response)
         raise AuthenticationError(
