@@ -62,6 +62,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        # Pass OPTIONS preflight requests straight through — rate limiting them
+        # causes CORSMiddleware to drop Access-Control-Allow-Credentials, resulting
+        # in a preflight failure ("does not have HTTP ok status").
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Read limits from module at call time so tests can patch them.
         max_per_minute: int = _this_module._MAX_REQUESTS
         max_per_hour: int = _this_module._MAX_PER_HOUR
