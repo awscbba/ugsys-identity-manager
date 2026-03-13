@@ -14,7 +14,7 @@ import base64
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from jose import JWTError, jwt
+import jwt
 
 from src.domain.exceptions import AuthenticationError
 from src.domain.repositories.token_blacklist_repository import TokenBlacklistRepository
@@ -79,7 +79,7 @@ class JWTTokenService(TokenService):
         # Step 1: Pre-check algorithm header BEFORE signature verification
         try:
             header = jwt.get_unverified_header(token)
-        except JWTError as e:
+        except jwt.PyJWTError as e:
             raise AuthenticationError(
                 message=f"Invalid token header: {e}",
                 user_message="Invalid or expired token",
@@ -116,11 +116,17 @@ class JWTTokenService(TokenService):
             )
 
         # Step 3: Decode and verify signature
+        # Decode without audience enforcement — aud is only present on access/service tokens.
+        # Refresh and password_reset tokens are internal and intentionally have no aud claim.
+        # We enforce aud manually below for token types that carry it.
         try:
             payload: dict[str, object] = jwt.decode(
-                token, verify_key, algorithms=["RS256"], audience=self._audience
+                token,
+                verify_key,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
             )
-        except JWTError as e:
+        except jwt.PyJWTError as e:
             raise AuthenticationError(
                 message=f"Invalid token: {e}",
                 user_message="Invalid or expired token",
@@ -132,6 +138,19 @@ class JWTTokenService(TokenService):
             if claim not in payload:
                 raise AuthenticationError(
                     message=f"Token missing required claim: '{claim}'",
+                    user_message="Invalid or expired token",
+                    error_code="INVALID_TOKEN",
+                )
+
+        # Step 4b: Enforce aud for access tokens only (they carry aud; internal tokens do not)
+        token_type = payload.get("type", "")
+        if token_type == "access":  # noqa: S105
+            token_aud = payload.get("aud")
+            if token_aud != self._audience:
+                raise AuthenticationError(
+                    message=(
+                        f"Token audience '{token_aud}' does not match expected '{self._audience}'"
+                    ),
                     user_message="Invalid or expired token",
                     error_code="INVALID_TOKEN",
                 )
