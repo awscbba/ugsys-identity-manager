@@ -11,8 +11,8 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
+import jwt
 from fastapi import FastAPI
-from jose import jwt
 from starlette.testclient import TestClient
 
 from src.presentation.middleware.rate_limiting import RateLimitMiddleware

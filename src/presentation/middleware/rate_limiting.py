@@ -5,8 +5,8 @@ import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 
+import jwt
 import structlog
-from jose import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -46,7 +46,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if auth.startswith("Bearer "):
             token = auth[len("Bearer ") :]
             try:
-                claims = jwt.get_unverified_claims(token)
+                claims = jwt.decode(
+                    token,
+                    options={"verify_signature": False},
+                    algorithms=["RS256"],
+                )
                 sub = claims.get("sub")
                 if sub:
                     return f"user:{sub}"

@@ -13,12 +13,12 @@ import time
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import serialization as _serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
-from jose import jwt
 
 from src.config import settings
 from src.domain.exceptions import AuthenticationError
