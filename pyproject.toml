@@ -11,7 +11,7 @@ dependencies = [
     "pydantic-settings>=2.3",
     "boto3>=1.34",
     "aioboto3>=13.0",
-    "pyjwt[crypto]>=2.8",
+    "pyjwt[crypto]>=2.12.0",
     "bcrypt>=4.0",
     "python-multipart>=0.0.9",
     "structlog>=24.1",
@@ -38,7 +38,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-ugsys-auth-client = { git = "https://github.com/awscbba/ugsys-shared-libs", tag = "auth-client/v0.1.0", subdirectory = "auth-client" }
+ugsys-auth-client = { git = "https://github.com/awscbba/ugsys-shared-libs", tag = "auth-client/v0.2.2", subdirectory = "auth-client" }
 ugsys-logging-lib  = { git = "https://github.com/awscbba/ugsys-shared-libs", tag = "logging-lib/v0.1.0",  subdirectory = "logging-lib" }
 ugsys-event-lib    = { git = "https://github.com/awscbba/ugsys-shared-libs", tag = "event-lib/v0.1.0",    subdirectory = "event-lib" }
 
