@@ -126,7 +126,7 @@ def _resolve_service_accounts() -> str:
         region = os.environ.get("AWS_REGION", "us-east-1")
         client = boto3.client("secretsmanager", region_name=region)
         response = client.get_secret_value(SecretId=secret_arn)
-        return response.get("SecretString", "{}")
+        return str(response.get("SecretString", "{}"))
 
     return "{}"
 
