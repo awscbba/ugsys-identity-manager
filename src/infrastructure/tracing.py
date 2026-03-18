@@ -11,7 +11,9 @@ from aws_xray_sdk.core.context import Context
 logger = structlog.get_logger()
 
 # Libraries to auto-patch — adds X-Ray subsegments for every outbound call
-_PATCH_MODULES = ("boto3", "requests", "httpx")
+# Note: "requests" is intentionally excluded — this service uses httpx, not requests.
+# Patching a module that isn't installed causes a startup crash.
+_PATCH_MODULES = ("boto3", "httpx")
 
 
 def configure_tracing(service_name: str) -> None:
