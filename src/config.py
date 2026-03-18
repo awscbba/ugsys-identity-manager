@@ -107,6 +107,37 @@ if _previous_key_id is not None and _previous_key_id != _rsa_keys.key_id:
 _previous_key_id = _rsa_keys.key_id
 
 
+def _resolve_service_accounts() -> str:
+    """
+    Resolve the SERVICE_ACCOUNTS_JSON string for the client_credentials grant.
+
+    Priority:
+      1. SERVICE_ACCOUNTS_JSON env var (local dev / CI)
+      2. SERVICE_ACCOUNTS_SECRET_ARN env var → fetch from Secrets Manager (prod Lambda)
+         Secret value is the raw JSON string of the service accounts map.
+      3. Returns "{}" (empty map) — service token endpoint will reject all clients.
+    """
+    raw = os.environ.get("SERVICE_ACCOUNTS_JSON", "")
+    if raw:
+        return raw
+
+    secret_arn = os.environ.get("SERVICE_ACCOUNTS_SECRET_ARN", "")
+    if secret_arn:
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_arn)
+        return str(response.get("SecretString", "{}"))
+
+    return "{}"
+
+
+# Resolved once at cold-start — injected into SERVICE_ACCOUNTS_JSON env var so
+# _load_service_accounts() in main.py picks it up without any changes there.
+_service_accounts_json = _resolve_service_accounts()
+if _service_accounts_json and _service_accounts_json != "{}":
+    os.environ.setdefault("SERVICE_ACCOUNTS_JSON", _service_accounts_json)
+
+
 class Settings(BaseSettings):
     service_name: str = "ugsys-identity-manager"
     environment: str = _resolve_environment()
