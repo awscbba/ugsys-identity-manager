@@ -54,7 +54,8 @@ def _resolve_rsa_keys() -> RsaKeyPair:
         region = os.environ.get("AWS_REGION", "us-east-1")
         client = boto3.client("secretsmanager", region_name=region)
         response = client.get_secret_value(SecretId=secret_arn)
-        parsed: dict[str, str] = json.loads(response.get("SecretString", "{}"))
+        secret_string: str = str(response.get("SecretString", "{}"))
+        parsed: dict[str, str] = json.loads(secret_string)
         return RsaKeyPair(
             private_key=parsed["private_key"],
             public_key=parsed["public_key"],
